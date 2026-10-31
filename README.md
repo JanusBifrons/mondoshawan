@@ -45,8 +45,14 @@ Each project can add knowledge sources:
 "knowledge": {
   "folders": [{ "path": "C:/.../eqx-net/Design", "label": "Design folder" }],
   "exclude": ["diag/", "src/"],
-  "links": [{ "title": "Equinox Bugs", "url": "https://docs.google.com/...", "source": "Google Drive", "category": "Bugs & feedback" }]
+  "drive": { "folder": "EQX-Net" },
+  "links": [{ "title": "Some page", "url": "https://...", "source": "Web" }]
 }
 ```
+
+## Google Drive sync
+Each project can mirror one Google Drive folder into Mondo's local database. Mondo can't reach Drive on its own, so a Claude session does the sync through the Google Drive connector. In a Claude session opened in this folder, say **"sync Drive"** (or `/drive-sync`). Mondo doesn't need to be running. Last-sync status is on the Settings page.
+
+Data lives in `data/mondo.db` (SQLite).
 
 See `design/brief.md` for the bigger picture and `CLAUDE.md` for design decisions.

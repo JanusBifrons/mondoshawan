@@ -13,7 +13,10 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
 - **Hook script has no dependencies, a 1s timeout, swallows all errors, always exits 0, and prints nothing.** It is registered globally in `~/.claude/settings.json` by `scripts/install-hooks.mjs`, which does a dry run by default, backs up the file before changing it, merges, and can be undone with `scripts/uninstall-hooks.mjs`. Mondo's entries are identified by `mondo-hook.js` in the command.
 - **Hooks are `async: true`** (non-blocking), except SessionEnd, which is sync so it gets sent before the process exits.
 - **Events:** SessionStart, UserPromptSubmit, PostToolUse, Stop, Notification, SessionEnd. PostToolUse is there because no hook fires when a permission prompt is answered.
-- **Storage is `data/state.json`** (gitignored), with atomic writes. No native modules (no better-sqlite3) until we deliberately move to SQLite.
+- **Storage is SQLite at `data/mondo.db`** (gitignored), via Node's built-in `node:sqlite`, the same as eqx-net. It needs no native module, so Electron packaging stays simple.
+  - `lib/db.ts` opens it (WAL mode, `busy_timeout`). `lib/schema.ts` holds append-only migrations tracked by `PRAGMA user_version`.
+  - Load `node:sqlite` only through `process.getBuiltinModule`. A static import or `createRequire` breaks `next build`.
+  - The old `data/state.json` is imported once and renamed to `.imported`.
 - **Paths are normalised before comparing:** `/c/x` → `c:/x`, backslashes become forward slashes, everything lowercase, no trailing slash.
 - **A session matches the project** whose path or worktree path is the longest prefix of its cwd.
 - **Live updates use Server-Sent Events** (`/api/stream`), with polling as a fallback.
@@ -31,7 +34,11 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
   - hand-listed `knowledge.links` (Google Drive docs etc.).
 - **Indexing details:** categories come from path rules in `categorize()`. Titles, summaries and status flags come from `describeMarkdown()`. The index is cached for 30s.
 - **Doc previews:** `/api/knowledge/<project>/doc?id=` returns a doc only if its id is in the index, so paths can't be forged.
-- **Google Drive:** Mondo has no Drive API access yet, so Drive docs are listed by hand in config. Options for later: the Drive API with OAuth, or Google Drive for Desktop plus a `folders` entry.
+- **Google Drive:** each project can mirror one Drive folder (`knowledge.drive.folder`, plus an optional pinned `folderId`).
+  - Mondo can't reach Drive itself. A Claude session runs the `drive-sync` skill (`.claude/skills/drive-sync/SKILL.md`): it lists the folder with the Google Drive connector, reads new/changed docs, and runs `npm run drive:import`, which writes straight to SQLite.
+  - `npm run drive:status` shows what's already stored.
+  - Drive docs are origin `drive` in the knowledge base; their text opens in the reading pane.
+  - The sync is read-only toward Drive.
 
 ## Commands
 - `npm run dev`: Electron window plus the Next dev server.
@@ -39,6 +46,7 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
 - `npm run check:projects`: verify registered projects, branches and worktrees.
 - `npm run fake -- <scenario>`: fire fake hook events.
 - `npm run hooks:install` (dry run), then `npm run hooks:install -- --apply`; `npm run hooks:uninstall`.
+- `npm run drive:status` / `npm run drive:import -- <payload.json>`: Drive mirror (used by the drive-sync skill).
 - `npm test`: vitest.
 
 ## Notes
