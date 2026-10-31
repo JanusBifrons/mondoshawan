@@ -15,7 +15,8 @@
     "hooks:install": "node scripts/install-hooks.mjs",
     "hooks:uninstall": "node scripts/uninstall-hooks.mjs",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "node node_modules/electron/install.js"
   },
   "engines": {
     "node": ">=20"

@@ -33,7 +33,8 @@ export function dataDir(): string {
 export function loadConfig(): MondoConfig {
   let raw: Partial<MondoConfig> = {};
   try {
-    raw = JSON.parse(fs.readFileSync(configPath(), "utf8"));
+    // Runtime config, not a bundled asset, so tell Turbopack not to trace it.
+    raw = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ configPath(), "utf8"));
   } catch (err) {
     console.warn(`[mondo] could not read ${configPath()}: ${(err as Error).message}`);
   }
