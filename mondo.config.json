@@ -6,7 +6,29 @@
   "projects": [
     {
       "name": "EQX-Net",
-      "path": "C:/Users/alecv/Documents/Projects/eqx-net/eqx-net"
+      "path": "C:/Users/alecv/Documents/Projects/eqx-net/eqx-net",
+      "knowledge": {
+        "folders": [
+          { "path": "C:/Users/alecv/Documents/Projects/eqx-net/Design", "label": "Design folder" }
+        ],
+        "exclude": ["diag/", "src/", "tests/"],
+        "links": [
+          {
+            "title": "Equinox Bugs",
+            "url": "https://docs.google.com/document/d/15Y9d6HFCflNW2KnoHx7b33cYYCiTh0HS7IWnx8v3L9Y/edit",
+            "source": "Google Drive",
+            "category": "Bugs & feedback",
+            "modified": "2026-06-17T10:44:07Z"
+          },
+          {
+            "title": "Equinox Tweaks / Improvements",
+            "url": "https://docs.google.com/document/d/1_4DuW5Zelj0aXnl5U3AMnCusF6-jm43brn-1mJCf8QY/edit",
+            "source": "Google Drive",
+            "category": "Bugs & feedback",
+            "modified": "2026-06-21T17:54:18Z"
+          }
+        ]
+      }
     },
     {
       "name": "Mondo",
