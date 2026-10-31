@@ -1,7 +1,8 @@
 // Mondo desktop window. Electron is only a shell: it makes sure the Next.js server is
 // running (starting it if nothing answers on the configured port), then loads it.
 const { app, BrowserWindow, shell } = require("electron");
-const { spawn, execFile } = require("node:child_process");
+const { spawn, execFile, execFileSync } = require("node:child_process");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
@@ -77,6 +78,57 @@ function stopServer() {
   }
 }
 
+/** Identifies the code a build was made from: git HEAD plus any uncommitted changes. */
+function sourceStamp() {
+  try {
+    const git = (args) => execFileSync("git", ["-C", root, ...args], { windowsHide: true }).toString();
+    const status = git(["status", "--porcelain", "--", ".", ":(exclude)data"]);
+    return git(["rev-parse", "HEAD"]).trim() + ":" + crypto.createHash("sha1").update(status).digest("hex");
+  } catch {
+    return null; // not a git checkout: only build when there's no build at all
+  }
+}
+
+/**
+ * Production mode needs `next build`. Rebuild when there's no build yet, or the code
+ * changed since the last one (so the desktop shortcut always runs current code).
+ */
+async function ensureBuild(win) {
+  const stampFile = path.join(root, ".next", "mondo-build-stamp");
+  const hasBuild = fs.existsSync(path.join(root, ".next", "BUILD_ID"));
+  const stamp = sourceStamp();
+  let built = null;
+  try {
+    built = fs.readFileSync(stampFile, "utf8");
+  } catch {
+    /* no stamp yet */
+  }
+  if (hasBuild && (stamp === null || stamp === built)) return true;
+
+  win.loadURL(statusPage("Updating Mondo… (building, this takes about a minute)"));
+  const nextBin = path.join(root, "node_modules", "next", "dist", "bin", "next");
+  const code = await new Promise((resolve) => {
+    const p = spawn(process.execPath, [nextBin, "build"], {
+      cwd: root,
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: "1",
+        NODE_OPTIONS: [process.env.NODE_OPTIONS, "--disable-warning=ExperimentalWarning"].filter(Boolean).join(" "),
+      },
+      stdio: "inherit",
+      windowsHide: true,
+    });
+    p.on("exit", resolve);
+    p.on("error", () => resolve(1));
+  });
+  if (code !== 0) {
+    win.loadURL(statusPage("Mondo couldn't build. Run <code>npm run build</code> in the Mondo folder to see why."));
+    return false;
+  }
+  if (stamp) fs.writeFileSync(stampFile, stamp);
+  return true;
+}
+
 const statusPage = (msg) =>
   "data:text/html;charset=utf-8," +
   encodeURIComponent(
@@ -91,6 +143,7 @@ async function createWindow() {
     height: 720,
     title: "Mondo",
     backgroundColor: "#111317",
+    icon: path.join(root, "assets", "mondo.ico"),
     autoHideMenuBar: true,
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
@@ -105,6 +158,7 @@ async function createWindow() {
     return;
   }
   if (state === "none") {
+    if (!dev && !(await ensureBuild(win))) return;
     win.loadURL(statusPage("Starting Mondo…"));
     startServer();
     const deadline = Date.now() + 120_000;
@@ -125,6 +179,10 @@ async function createWindow() {
   }
   win.loadURL(url);
 }
+
+// Own taskbar identity (matches the desktop shortcut), so Mondo doesn't group as "Electron".
+app.setAppUserModelId("Mondoshawan.Mondo");
+app.setName("Mondo");
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();

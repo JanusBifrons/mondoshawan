@@ -16,6 +16,7 @@
     "hooks:uninstall": "node scripts/uninstall-hooks.mjs",
     "drive:status": "node --disable-warning=ExperimentalWarning --import tsx scripts/drive-status.ts",
     "drive:import": "node --disable-warning=ExperimentalWarning --import tsx scripts/drive-import.ts",
+    "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-shortcut.ps1",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "postinstall": "node node_modules/electron/install.js"
