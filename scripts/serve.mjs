@@ -31,7 +31,14 @@ console.log(`[mondo] ${dev ? "dev" : "production"} server on http://${host}:${po
 const child = spawn(process.execPath, [nextBin, dev ? "dev" : "start", "-H", host, "-p", port], {
   cwd: root,
   stdio: "inherit",
-  env: { ...process.env, MONDO_ROOT: root, MONDO_HOST: host, MONDO_PORT: port },
+  env: {
+    ...process.env,
+    MONDO_ROOT: root,
+    MONDO_HOST: host,
+    MONDO_PORT: port,
+    // node:sqlite still prints an "experimental" warning on Node 24; it's stable enough for us.
+    NODE_OPTIONS: [process.env.NODE_OPTIONS, "--disable-warning=ExperimentalWarning"].filter(Boolean).join(" "),
+  },
 });
 
 const stop = () => child.kill();

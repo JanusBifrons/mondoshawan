@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import path from "node:path";
 import { dataDir } from "./config";
+import { getDb, tx, type DB } from "./db";
 import { branchFor, resolveCwd } from "./resolver";
 import { deriveStatus, type HookPayload, type SessionStatus } from "./status";
 
@@ -22,60 +23,108 @@ export interface Session {
   system: string;
 }
 
-interface State {
-  version: 1;
-  sessions: Record<string, Session>;
+interface Row {
+  id: string;
+  cwd: string;
+  project: string | null;
+  worktree: string;
+  branch: string | null;
+  status: string;
+  status_at: number;
+  started_at: number;
+  last_activity: number;
+  last_event: string;
+  last_message: string | null;
+  transcript_path: string | null;
+  system: string;
 }
 
-class Store extends EventEmitter {
-  private state: State;
-  private file: string;
-  private saveTimer: NodeJS.Timeout | null = null;
+const fromRow = (r: Row): Session => ({
+  id: r.id,
+  cwd: r.cwd,
+  project: r.project,
+  worktree: r.worktree,
+  branch: r.branch,
+  status: r.status as SessionStatus,
+  statusAt: r.status_at,
+  startedAt: r.started_at,
+  lastActivity: r.last_activity,
+  lastEvent: r.last_event,
+  lastMessage: r.last_message,
+  transcriptPath: r.transcript_path,
+  system: r.system,
+});
+
+const UPSERT = `
+  INSERT INTO sessions (id, cwd, project, worktree, branch, status, status_at, started_at,
+                        last_activity, last_event, last_message, transcript_path, system)
+  VALUES (:id, :cwd, :project, :worktree, :branch, :status, :statusAt, :startedAt,
+          :lastActivity, :lastEvent, :lastMessage, :transcriptPath, :system)
+  ON CONFLICT(id) DO UPDATE SET
+    cwd = excluded.cwd, project = excluded.project, worktree = excluded.worktree,
+    branch = excluded.branch, status = excluded.status, status_at = excluded.status_at,
+    started_at = excluded.started_at, last_activity = excluded.last_activity,
+    last_event = excluded.last_event, last_message = excluded.last_message,
+    transcript_path = excluded.transcript_path, system = excluded.system`;
+
+/** Sessions live in SQLite (table `sessions`); every change is written straight through. */
+export class Store extends EventEmitter {
   private queues = new Map<string, Promise<void>>();
 
-  constructor() {
+  constructor(private db: DB) {
     super();
     this.setMaxListeners(100);
-    this.file = path.join(dataDir(), "state.json");
-    this.state = this.load();
   }
 
-  private load(): State {
-    try {
-      const raw = JSON.parse(fs.readFileSync(this.file, "utf8"));
-      if (raw && typeof raw.sessions === "object") return { version: 1, sessions: raw.sessions };
-    } catch {
-      /* first run or unreadable: start empty */
+  /** One-time move from the MVP's data/state.json into the database. */
+  importLegacyJson(file: string) {
+    if (!fs.existsSync(file)) return;
+    const count = (this.db.prepare("SELECT COUNT(*) AS n FROM sessions").get() as { n: number }).n;
+    if (count === 0) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(file, "utf8")) as { sessions?: Record<string, Session> };
+        const sessions = Object.values(raw.sessions ?? {});
+        const stmt = this.db.prepare(UPSERT);
+        tx(this.db, () => sessions.forEach((s) => stmt.run(this.params(s))));
+        console.log(`[mondo] imported ${sessions.length} sessions from ${file}`);
+      } catch (err) {
+        console.error("[mondo] could not import state.json:", (err as Error).message);
+        return;
+      }
     }
-    return { version: 1, sessions: {} };
+    fs.renameSync(file, file + ".imported");
   }
 
-  private scheduleSave() {
-    if (this.saveTimer) return;
-    this.saveTimer = setTimeout(() => {
-      this.saveTimer = null;
-      this.saveNow();
-    }, 200);
+  private params(s: Session) {
+    return {
+      id: s.id,
+      cwd: s.cwd ?? "",
+      project: s.project ?? null,
+      worktree: s.worktree ?? "",
+      branch: s.branch ?? null,
+      status: s.status,
+      statusAt: s.statusAt ?? 0,
+      startedAt: s.startedAt ?? 0,
+      lastActivity: s.lastActivity ?? 0,
+      lastEvent: s.lastEvent ?? "",
+      lastMessage: s.lastMessage ?? null,
+      transcriptPath: s.transcriptPath ?? null,
+      system: s.system ?? "",
+    };
   }
 
-  saveNow() {
-    try {
-      fs.mkdirSync(path.dirname(this.file), { recursive: true });
-      const tmp = this.file + ".tmp";
-      fs.writeFileSync(tmp, JSON.stringify(this.state, null, 2));
-      fs.renameSync(tmp, this.file);
-    } catch (err) {
-      console.error("[mondo] failed to save state:", (err as Error).message);
-    }
+  private get(id: string): Session | null {
+    const r = this.db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as Row | undefined;
+    return r ? fromRow(r) : null;
   }
 
-  private changed() {
-    this.scheduleSave();
+  private save(s: Session) {
+    this.db.prepare(UPSERT).run(this.params(s));
     this.emit("change");
   }
 
   list(): Session[] {
-    return Object.values(this.state.sessions).sort((a, b) => b.lastActivity - a.lastActivity);
+    return (this.db.prepare("SELECT * FROM sessions ORDER BY last_activity DESC").all() as unknown as Row[]).map(fromRow);
   }
 
   /** Apply events for the same session one at a time, in arrival order. */
@@ -94,7 +143,7 @@ class Store extends EventEmitter {
   private async applyHookNow(e: HookPayload) {
     const now = Date.now();
     const ts = typeof e._mondo_ts === "number" && e._mondo_ts > 0 ? e._mondo_ts : now;
-    const existing = this.state.sessions[e.session_id];
+    const existing = this.get(e.session_id);
     const cwd = e.cwd || existing?.cwd || "";
 
     const [match, branch] = cwd
@@ -139,32 +188,29 @@ class Store extends EventEmitter {
       }
     }
 
-    this.state.sessions[s.id] = s;
-    this.changed();
+    this.save(s);
   }
 
   setSystem(id: string, system: string): Session | null {
-    const s = this.state.sessions[id];
+    const s = this.get(id);
     if (!s) return null;
     s.system = system.slice(0, 200);
-    this.changed();
+    this.save(s);
     return s;
   }
 
   remove(id: string): boolean {
-    if (!this.state.sessions[id]) return false;
-    delete this.state.sessions[id];
-    this.changed();
-    return true;
+    const removed = this.db.prepare("DELETE FROM sessions WHERE id = ?").run(id).changes > 0;
+    if (removed) this.emit("change");
+    return removed;
   }
 }
 
 const g = globalThis as unknown as { __mondoStore?: Store };
 export function getStore(): Store {
   if (!g.__mondoStore) {
-    g.__mondoStore = new Store();
-    const flush = () => g.__mondoStore?.saveNow();
-    process.once("exit", flush);
+    g.__mondoStore = new Store(getDb());
+    g.__mondoStore.importLegacyJson(path.join(dataDir(), "state.json"));
   }
   return g.__mondoStore;
 }
