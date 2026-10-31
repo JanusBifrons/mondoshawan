@@ -15,6 +15,12 @@ export function normalizePath(input: string): string {
   return p;
 }
 
+/** Turn a Git Bash style path (`/c/Users/x`) into one Windows tools accept (`C:/Users/x`). Keeps case. */
+export function toNativePath(input: string): string {
+  if (process.platform !== "win32") return input;
+  return input.replace(/^\/([a-zA-Z])(?=\/|$)/, (_, d: string) => `${d.toUpperCase()}:`);
+}
+
 /** True when `child` is `parent` or sits somewhere beneath it. Both must be normalised. */
 export function isWithin(child: string, parent: string): boolean {
   if (!child || !parent) return false;

@@ -28,4 +28,5 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
 
 ## Notes
 - Next.js 16: route handler `params` is a Promise.
-- Server-side singletons live on `globalThis`, so they survive dev module reloads.
+- Server-side singletons (store, resolver cache) live on `globalThis`, so they survive dev module reloads. The catch is that after editing `lib/store.ts` or anything it imports, you must restart the dev server, or the old store keeps running the old code.
+- Claude Code on Windows may report a cwd as `C:\...` or `/c/...`. Use `normalizePath` when comparing paths and `toNativePath` before handing one to git or fs.
