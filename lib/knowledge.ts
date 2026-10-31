@@ -2,16 +2,19 @@ import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { loadConfig, projectSlug, type ProjectConfig } from "./config";
+import { getDb } from "./db";
+import { getDriveFile, listDriveFiles } from "./drive";
 import { dirExists } from "./git";
 
 /**
  * Knowledge index: collects a project's written sources into one list.
  *  - repo:   markdown files tracked by git in the project (dates from git history)
  *  - folder: markdown in extra folders from config, e.g. the wrapper Design/ folder (dates from disk)
- *  - link:   hand-listed external docs from config, e.g. Google Drive
+ *  - drive:  the project's Google Drive folder, mirrored into SQLite by the drive-sync skill
+ *  - link:   hand-listed external docs from config
  */
 
-export type Origin = "repo" | "folder" | "link";
+export type Origin = "repo" | "folder" | "drive" | "link";
 
 export interface KnowledgeSource {
   id: string;
@@ -27,6 +30,8 @@ export interface KnowledgeSource {
   modified: string | null;
   flags: string[];
   words: number | null;
+  /** True when Mondo has the text, so it can open in the reading pane. */
+  hasContent: boolean;
 }
 
 interface IndexedSource extends KnowledgeSource {
@@ -73,7 +78,10 @@ export function categorize(relPath: string, origin: Origin): string {
   if (/(^|\/)(design|gdd)\//.test(p)) return "Design";
   if (/(^|\/)(perf|ops|refactors?|deploy\w*)\//.test(p)) return "Ops & perf";
   if (/bug|feedback|playtest/.test(name)) return "Bugs & feedback";
-  if (!p.includes("/") || /^(readme|claude|agents|lessons|manifest|feel_goals|contributing)/.test(name)) return "Guides";
+  // Top-level repo files are usually guides (README, CLAUDE.md); top-level Drive docs aren't.
+  if ((origin === "repo" && !p.includes("/")) || /^(readme|claude|agents|lessons|manifest|feel_goals|contributing)/.test(name)) {
+    return "Guides";
+  }
   return "Other";
 }
 
@@ -166,6 +174,7 @@ async function repoSources(p: ProjectConfig): Promise<IndexedSource[]> {
       relPath: rel,
       url: null,
       modified: dates.get(rel) ?? null,
+      hasContent: true,
       absPath,
     };
   });
@@ -211,6 +220,7 @@ function folderSources(p: ProjectConfig): IndexedSource[] {
         relPath: rel,
         url: null,
         modified,
+        hasContent: true,
         absPath,
       };
     }),
@@ -233,8 +243,35 @@ function linkSources(p: ProjectConfig): IndexedSource[] {
     modified: l.modified ?? null,
     flags: [],
     words: null,
+    hasContent: false,
     absPath: null,
   }));
+}
+
+/** Drive docs mirrored into SQLite. Read fresh each time (cheap), so a sync shows up on reload. */
+function driveSources(p: ProjectConfig): IndexedSource[] {
+  const slug = projectSlug(p.name);
+  return listDriveFiles(getDb(), p.name).map((f) => {
+    const d = f.content ? describeMarkdown(f.content, f.title) : null;
+    const where = f.folderPath ? `${f.folderPath}/${f.title}` : f.title;
+    return {
+      id: `drive:${f.id}`,
+      project: p.name,
+      projectSlug: slug,
+      title: f.title,
+      summary: d?.summary ?? null,
+      category: categorize(where, "drive"),
+      origin: "drive" as const,
+      originLabel: "Google Drive",
+      relPath: f.folderPath || null,
+      url: f.url,
+      modified: f.modifiedTime,
+      flags: d?.flags ?? [],
+      words: d?.words ?? null,
+      hasContent: f.content !== null,
+      absPath: null,
+    };
+  });
 }
 
 const g = globalThis as unknown as { __mondoKnowledge?: Map<string, { at: number; value: IndexedSource[] }> };
@@ -251,17 +288,27 @@ async function indexProject(p: ProjectConfig): Promise<IndexedSource[]> {
 
 const strip = ({ absPath: _abs, ...s }: IndexedSource): KnowledgeSource => s;
 
+async function allSources(p: ProjectConfig): Promise<IndexedSource[]> {
+  return [...(await indexProject(p)), ...driveSources(p)];
+}
+
 export async function getKnowledge(slug?: string): Promise<KnowledgeSource[]> {
   const projects = loadConfig().projects.filter((p) => !slug || projectSlug(p.name) === slug);
-  const all = (await Promise.all(projects.map(indexProject))).flat();
+  const all = (await Promise.all(projects.map(allSources))).flat();
   return all.map(strip);
 }
 
-/** Full text of one indexed markdown source. Only ids from the index resolve, so no path tricks. */
+/** Full text of one indexed source. Only ids from the index resolve, so no path tricks. */
 export async function getKnowledgeDoc(slug: string, id: string) {
   const p = loadConfig().projects.find((x) => projectSlug(x.name) === slug);
   if (!p) return null;
-  const src = (await indexProject(p)).find((s) => s.id === id);
-  if (!src || !src.absPath) return null;
+  const src = (await allSources(p)).find((s) => s.id === id);
+  if (!src) return null;
+  if (src.origin === "drive") {
+    const file = getDriveFile(getDb(), id.slice("drive:".length));
+    if (!file?.content) return null;
+    return { source: strip(src), content: file.content, absPath: null };
+  }
+  if (!src.absPath) return null;
   return { source: strip(src), content: readSafe(src.absPath), absPath: src.absPath };
 }

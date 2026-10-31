@@ -90,9 +90,10 @@ export function KnowledgeBrowser({ sources, showProject = false }: { sources: Kn
     [sources, q, project, category, origin],
   );
 
+  // Read it here when Mondo has the text; otherwise open the original (e.g. in Drive).
   const open = (s: KnowledgeSource) => {
-    if (s.url) window.open(s.url, "_blank", "noopener");
-    else setSelected(s);
+    if (s.hasContent) setSelected(s);
+    else if (s.url) window.open(s.url, "_blank", "noopener");
   };
 
   return (
@@ -144,7 +145,7 @@ export function KnowledgeBrowser({ sources, showProject = false }: { sources: Kn
                 <TableCell className="max-w-0 w-full pl-4 whitespace-normal">
                   <div className="flex items-center gap-2">
                     <span className="truncate font-medium">{s.title}</span>
-                    {s.url && <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />}
+                    {s.url && !s.hasContent && <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />}
                     {s.flags.map((f) => (
                       <Badge key={f} variant="outline" className="shrink-0 text-[10px] uppercase text-muted-foreground">
                         {f}
@@ -181,7 +182,7 @@ export function KnowledgeBrowser({ sources, showProject = false }: { sources: Kn
 }
 
 function DocSheet({ source, onClose }: { source: KnowledgeSource | null; onClose: () => void }) {
-  const [doc, setDoc] = useState<{ content: string; absPath: string } | null>(null);
+  const [doc, setDoc] = useState<{ content: string; absPath: string | null } | null>(null);
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -215,7 +216,7 @@ function DocSheet({ source, onClose }: { source: KnowledgeSource | null; onClose
                   {source.words != null && <span>· {source.words.toLocaleString()} words</span>}
                 </div>
               </SheetDescription>
-              {doc && (
+              {doc?.absPath && (
                 <div className="flex items-center gap-2">
                   <code className="truncate rounded bg-muted px-1.5 py-0.5 text-xs">{doc.absPath}</code>
                   <Button
@@ -223,9 +224,18 @@ function DocSheet({ source, onClose }: { source: KnowledgeSource | null; onClose
                     variant="ghost"
                     className="size-7 shrink-0"
                     title="Copy path"
-                    onClick={() => navigator.clipboard?.writeText(doc.absPath)}
+                    onClick={() => navigator.clipboard?.writeText(doc.absPath ?? "")}
                   >
                     <Copy />
+                  </Button>
+                </div>
+              )}
+              {source.url && (
+                <div>
+                  <Button asChild size="sm" variant="outline">
+                    <a href={source.url} target="_blank" rel="noreferrer">
+                      <ExternalLink /> Open in {source.originLabel}
+                    </a>
                   </Button>
                 </div>
               )}

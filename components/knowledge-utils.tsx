@@ -1,4 +1,4 @@
-import { Cloud, Folder, GitBranch } from "lucide-react";
+import { Cloud, Folder, GitBranch, Link2 } from "lucide-react";
 import type { KnowledgeSource } from "@/lib/knowledge";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +14,6 @@ export function since(iso: string | null): string {
 }
 
 export function OriginIcon({ origin, className }: { origin: KnowledgeSource["origin"]; className?: string }) {
-  const Icon = origin === "repo" ? GitBranch : origin === "folder" ? Folder : Cloud;
+  const Icon = { repo: GitBranch, folder: Folder, drive: Cloud, link: Link2 }[origin];
   return <Icon className={cn("size-3.5 shrink-0", className)} />;
 }

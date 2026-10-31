@@ -1,4 +1,6 @@
-import { CheckCircle2, CircleAlert, XCircle } from "lucide-react";
+import { CheckCircle2, CircleAlert, Cloud, XCircle } from "lucide-react";
+import { getDb } from "@/lib/db";
+import { lastDriveSync, listDriveFiles } from "@/lib/drive";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +12,14 @@ import { checkProjects } from "@/lib/projects";
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const { server } = loadConfig();
+  const { server, projects: registered } = loadConfig();
+  const db = getDb();
+  const drive = registered.map((p) => ({
+    project: p.name,
+    folder: p.knowledge?.drive?.folder ?? null,
+    last: lastDriveSync(db, p.name),
+    count: listDriveFiles(db, p.name).length,
+  }));
   const hooks = getHookStatus();
   const projects = await checkProjects();
   const allHooks = hooks.events.every((e) => e.installed);
@@ -80,6 +89,53 @@ export default async function SettingsPage() {
               Set <code className="rounded bg-muted px-1">MONDO_HOST</code> /{" "}
               <code className="rounded bg-muted px-1">MONDO_PORT</code> or edit the config file, then restart Mondo.
             </p>
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Cloud className="size-4" /> Google Drive
+            </CardTitle>
+            <CardDescription>
+              Each project can mirror one Drive folder. A Claude session syncs it through the Google Drive connector:
+              ask Claude to <span className="font-medium text-foreground">&ldquo;sync Drive&rdquo;</span> (or run{" "}
+              <code className="rounded bg-muted px-1">/drive-sync</code>) in the Mondo repo.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Project</TableHead>
+                  <TableHead>Drive folder</TableHead>
+                  <TableHead>Last sync</TableHead>
+                  <TableHead className="text-right">Docs</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {drive.map((d) => (
+                  <TableRow key={d.project}>
+                    <TableCell className="font-medium">{d.project}</TableCell>
+                    <TableCell>{d.folder ?? <span className="text-muted-foreground">not set</span>}</TableCell>
+                    <TableCell>
+                      {!d.last ? (
+                        <span className="text-muted-foreground">{d.folder ? "never" : "—"}</span>
+                      ) : d.last.error ? (
+                        <span className="text-destructive" title={d.last.error}>
+                          failed {new Date(d.last.startedAt).toLocaleString("en-GB")}
+                        </span>
+                      ) : (
+                        <span title={`${d.last.filesChanged} changed, ${d.last.filesRemoved} removed`}>
+                          {new Date(d.last.startedAt).toLocaleString("en-GB")}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">{d.count}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
 
