@@ -1,4 +1,5 @@
 // Pure helpers for adding/removing Mondo's hooks in a Claude Code settings object.
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -54,6 +55,14 @@ export function addMondoHooks(settings, command = hookCommand()) {
     next.hooks[ev] = [...(next.hooks[ev] ?? []), group];
   }
   return next;
+}
+
+/** Copy `file` to `<file>.bak-<timestamp>` without ever overwriting an earlier backup. */
+export function backupFile(file) {
+  let backup = `${file}.bak-${timestamp()}`;
+  for (let n = 2; fs.existsSync(backup); n++) backup = `${file}.bak-${timestamp()}-${n}`;
+  fs.copyFileSync(file, backup, fs.constants.COPYFILE_EXCL);
+  return backup;
 }
 
 export function timestamp(d = new Date()) {

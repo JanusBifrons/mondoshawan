@@ -5,7 +5,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { addMondoHooks, hookCommand, mondoEntries, timestamp } from "./hooks-settings.mjs";
+import { addMondoHooks, backupFile, hookCommand, mondoEntries } from "./hooks-settings.mjs";
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
@@ -43,8 +43,7 @@ if (!apply) {
 }
 
 if (exists) {
-  const backup = `${file}.bak-${timestamp()}`;
-  fs.copyFileSync(file, backup);
+  const backup = backupFile(file);
   console.log(`\nBackup written: ${backup}`);
 }
 fs.mkdirSync(path.dirname(file), { recursive: true });

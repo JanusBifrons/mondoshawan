@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { removeMondoHooks, timestamp } from "./hooks-settings.mjs";
+import { backupFile, removeMondoHooks } from "./hooks-settings.mjs";
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
@@ -35,8 +35,7 @@ if (dryRun) {
   process.exit(0);
 }
 
-const backup = `${file}.bak-${timestamp()}`;
-fs.copyFileSync(file, backup);
+const backup = backupFile(file);
 fs.writeFileSync(file, JSON.stringify(updated, null, 2) + "\n");
 console.log(`Backup written: ${backup}`);
 console.log("Removed Mondo's hooks. Other settings and hooks are untouched.");
