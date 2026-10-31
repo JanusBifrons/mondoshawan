@@ -3,6 +3,7 @@
 // Writes straight to data/mondo.db, so Mondo doesn't need to be running.
 // Payload shape: see DriveImportPayload in lib/drive.ts.
 import fs from "node:fs";
+import path from "node:path";
 import { loadConfig } from "../lib/config";
 import { openDb } from "../lib/db";
 import { importDrive, type DriveImportPayload } from "../lib/drive";
@@ -19,8 +20,16 @@ function main() {
   for (const file of files) {
     try {
       const raw = JSON.parse(fs.readFileSync(file, "utf8"));
-      const payloads: DriveImportPayload[] = Array.isArray(raw) ? raw : [raw];
+      const payloads: (DriveImportPayload & { files?: { contentFile?: string; content?: string | null }[] })[] =
+        Array.isArray(raw) ? raw : [raw];
       for (const p of payloads) {
+        // `contentFile` (path relative to the payload) avoids escaping long text inside JSON.
+        for (const f of p.files ?? []) {
+          if (f.contentFile) {
+            f.content = fs.readFileSync(path.resolve(path.dirname(file), f.contentFile), "utf8");
+            delete f.contentFile;
+          }
+        }
         if (!projects.has(p.project)) throw new Error(`unknown project "${p.project}" (not in mondo.config.json)`);
         const r = importDrive(db, p);
         console.log(

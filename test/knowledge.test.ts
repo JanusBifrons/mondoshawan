@@ -14,6 +14,7 @@ describe("categorize", () => {
     ["design/brief.md", "Design"],
     ["README.md", "Guides"],
     ["docs/LESSONS.md", "Guides"],
+    ["docs/tweaks-and-improvements.md", "Bugs & feedback"],
     ["docs/Advanced Game Dev Stack Cheat Sheet.md", "Other"],
   ])("%s -> %s", (p, cat) => {
     expect(categorize(p, "repo")).toBe(cat);

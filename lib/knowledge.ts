@@ -77,7 +77,7 @@ export function categorize(relPath: string, origin: Origin): string {
   if (/(^|\/)plans?\//.test(p) || name.startsWith("plan")) return "Plans";
   if (/(^|\/)(design|gdd)\//.test(p)) return "Design";
   if (/(^|\/)(perf|ops|refactors?|deploy\w*)\//.test(p)) return "Ops & perf";
-  if (/bug|feedback|playtest/.test(name)) return "Bugs & feedback";
+  if (/bug|feedback|playtest|tweak|improvement/.test(name)) return "Bugs & feedback";
   // Top-level repo files are usually guides (README, CLAUDE.md); top-level Drive docs aren't.
   if ((origin === "repo" && !p.includes("/")) || /^(readme|claude|agents|lessons|manifest|feel_goals|contributing)/.test(name)) {
     return "Guides";
