@@ -14,12 +14,14 @@
     "fake": "node scripts/fake-hook.mjs",
     "hooks:install": "node scripts/install-hooks.mjs",
     "hooks:uninstall": "node scripts/uninstall-hooks.mjs",
+    "drive:status": "node --disable-warning=ExperimentalWarning --import tsx scripts/drive-status.ts",
+    "drive:import": "node --disable-warning=ExperimentalWarning --import tsx scripts/drive-import.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "postinstall": "node node_modules/electron/install.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

@@ -19,6 +19,8 @@ export interface KnowledgeConfig {
   exclude?: string[];
   /** Hand-listed external sources (Google Drive docs etc.). */
   links?: KnowledgeLink[];
+  /** Google Drive folder mirrored by the drive-sync skill (name in My Drive, optional pinned id). */
+  drive?: { folder: string; folderId?: string };
 }
 
 export interface ProjectConfig {
