@@ -5,7 +5,13 @@ Mondo is a desktop dashboard for the Claude Code sessions running on this machin
 ## Quick start
 ```bash
 npm install
-npm run dev            # opens the Mondo window (starts the server for you)
+npm run shortcut       # adds "Mondo" to the Desktop and Start menu
+```
+Then open Mondo from the shortcut. There's no terminal. If the code has changed since the last launch, Mondo rebuilds itself first ("Updating Mondo…"). Use `npm run shortcut -- -Startup` to also start it when you sign in to Windows, or `-Remove` to delete the shortcuts.
+
+While developing Mondo itself, use live-reload mode instead:
+```bash
+npm run dev            # opens the Mondo window with the dev server (hot reload)
 ```
 
 Server only, viewable in a browser at http://127.0.0.1:4317:

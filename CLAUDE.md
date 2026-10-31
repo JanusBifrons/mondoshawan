@@ -40,6 +40,11 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
   - Drive docs are origin `drive` in the knowledge base; their text opens in the reading pane.
   - The sync is read-only toward Drive.
 
+## Launching
+- **Shortcuts:** `npm run shortcut` creates Desktop and Start menu shortcuts that run `node_modules/electron/dist/electron.exe "<repo>"`, so no terminal is needed. Flags: `-Startup`, `-Remove`.
+- **Auto-rebuild:** in production mode `electron/main.cjs` runs `next build` first when there's no build, or when git HEAD plus uncommitted changes differ from `.next/mondo-build-stamp`.
+- **Icon:** `assets/mondo.ico`, drawn by `scripts/make-icon.ps1`.
+
 ## Commands
 - `npm run dev`: Electron window plus the Next dev server.
 - `npm run server` / `npm run server:dev`: server only.
