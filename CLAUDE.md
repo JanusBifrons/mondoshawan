@@ -18,6 +18,21 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
 - **A session matches the project** whose path or worktree path is the longest prefix of its cwd.
 - **Live updates use Server-Sent Events** (`/api/stream`), with polling as a fallback.
 
+## UI
+- **Stack:** shadcn/ui (Radix, `radix-nova` style) and Tailwind v4. Components live in `components/ui/` (add more with `npx shadcn@latest add <name>`). Light/dark mode comes from `next-themes` (class-based, follows the system by default).
+- **Hooks location:** shadcn's React hooks go to `lib/hooks/` (set in `components.json`), because `hooks/` is reserved for the Claude Code hook script.
+- **Layout:** `app/layout.tsx` wraps every page in the sidebar (`components/app-sidebar.tsx`). Each page renders its own `<PageHeader>`.
+- **Pages:** Sessions (`/`), Knowledge base (`/knowledge`, `/knowledge/<project>`), Settings (`/settings`), and "coming soon" placeholders (`/design`, `/roadmap`, `/prompts`).
+
+## Knowledge base
+- **What `lib/knowledge.ts` indexes for each project:**
+  - git-tracked markdown in the repo (minus `knowledge.exclude` prefixes), dated by last commit;
+  - markdown in `knowledge.folders` (e.g. the wrapper `Design/` folder), dated by file time;
+  - hand-listed `knowledge.links` (Google Drive docs etc.).
+- **Indexing details:** categories come from path rules in `categorize()`. Titles, summaries and status flags come from `describeMarkdown()`. The index is cached for 30s.
+- **Doc previews:** `/api/knowledge/<project>/doc?id=` returns a doc only if its id is in the index, so paths can't be forged.
+- **Google Drive:** Mondo has no Drive API access yet, so Drive docs are listed by hand in config. Options for later: the Drive API with OAuth, or Google Drive for Desktop plus a `folders` entry.
+
 ## Commands
 - `npm run dev`: Electron window plus the Next dev server.
 - `npm run server` / `npm run server:dev`: server only.

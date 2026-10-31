@@ -1,0 +1,137 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { BookOpen, FolderKanban, Library, Map, MonitorDot, PenTool, Settings } from "lucide-react";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  SidebarRail,
+} from "@/components/ui/sidebar";
+import { ThemeToggle } from "@/components/theme-toggle";
+
+export interface SidebarProject {
+  name: string;
+  slug: string;
+}
+
+function NavItem({
+  href,
+  label,
+  icon: Icon,
+  exact = false,
+  badge,
+}: {
+  href: string;
+  label: string;
+  icon: React.ComponentType;
+  exact?: boolean;
+  badge?: string;
+}) {
+  const pathname = usePathname();
+  const active = exact ? pathname === href : pathname === href || pathname.startsWith(href + "/");
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton asChild isActive={active} tooltip={label}>
+        <Link href={href}>
+          <Icon />
+          <span>{label}</span>
+        </Link>
+      </SidebarMenuButton>
+      {badge && <SidebarMenuBadge>{badge}</SidebarMenuBadge>}
+    </SidebarMenuItem>
+  );
+}
+
+export function AppSidebar({ projects }: { projects: SidebarProject[] }) {
+  const pathname = usePathname();
+  return (
+    <Sidebar collapsible="icon">
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <Link href="/">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                  <MonitorDot className="size-4" />
+                </div>
+                <div className="grid flex-1 text-left leading-tight">
+                  <span className="truncate font-semibold">Mondo</span>
+                  <span className="truncate text-xs text-muted-foreground">Mondoshawan</span>
+                </div>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Monitor</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <NavItem href="/" label="Sessions" icon={MonitorDot} exact />
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Knowledge</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <NavItem href="/knowledge" label="Knowledge base" icon={Library} exact />
+              <SidebarMenuItem>
+                <SidebarMenuSub>
+                  {projects.map((p) => {
+                    const href = `/knowledge/${p.slug}`;
+                    return (
+                      <SidebarMenuSubItem key={p.slug}>
+                        <SidebarMenuSubButton asChild isActive={pathname === href}>
+                          <Link href={href}>
+                            <BookOpen />
+                            <span>{p.name}</span>
+                          </Link>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    );
+                  })}
+                </SidebarMenuSub>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Coming soon</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <NavItem href="/design" label="Design docs" icon={PenTool} />
+              <NavItem href="/roadmap" label="Roadmap" icon={Map} />
+              <NavItem href="/prompts" label="Prompts & handoffs" icon={FolderKanban} />
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+
+      <SidebarFooter>
+        <SidebarMenu>
+          <NavItem href="/settings" label="Settings" icon={Settings} />
+          <ThemeToggle />
+        </SidebarMenu>
+      </SidebarFooter>
+      <SidebarRail />
+    </Sidebar>
+  );
+}

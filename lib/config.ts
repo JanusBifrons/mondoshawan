@@ -1,9 +1,39 @@
 import fs from "node:fs";
 import path from "node:path";
 
+export interface KnowledgeLink {
+  title: string;
+  url: string;
+  /** Where it lives, e.g. "Google Drive". */
+  source: string;
+  /** Optional category override, e.g. "Bugs". */
+  category?: string;
+  modified?: string;
+  note?: string;
+}
+
+export interface KnowledgeConfig {
+  /** Extra folders outside the repo to index (e.g. the wrapper Design/ folder). */
+  folders?: { path: string; label: string }[];
+  /** Repo-relative glob-ish prefixes to skip (e.g. "diag/"). */
+  exclude?: string[];
+  /** Hand-listed external sources (Google Drive docs etc.). */
+  links?: KnowledgeLink[];
+}
+
 export interface ProjectConfig {
   name: string;
   path: string;
+  knowledge?: KnowledgeConfig;
+}
+
+/** URL-safe id for a project name: "EQX-Net" -> "eqx-net". */
+export function projectSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+export function findProject(slug: string): ProjectConfig | undefined {
+  return loadConfig().projects.find((p) => projectSlug(p.name) === slug);
 }
 
 export interface MondoConfig {

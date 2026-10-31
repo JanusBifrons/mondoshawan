@@ -32,7 +32,21 @@ npm run fake -- --list       # list scenarios
 - `npm run check:projects`: confirms each registered project exists, and shows its branch and worktrees.
 - `npm test`: unit tests.
 
+## Pages
+- **Sessions:** live Claude Code sessions.
+- **Knowledge base:** docs from every project in one list, searchable and filterable, with a reading pane. It draws on repo markdown, folders outside the repo, and linked Google Drive docs.
+- **Settings:** hook install status, server address, and registered projects.
+
 ## Configuration
 `mondo.config.json` holds the project registry and the server host and port. The `MONDO_HOST` and `MONDO_PORT` environment variables override the config.
+
+Each project can add knowledge sources:
+```json
+"knowledge": {
+  "folders": [{ "path": "C:/.../eqx-net/Design", "label": "Design folder" }],
+  "exclude": ["diag/", "src/"],
+  "links": [{ "title": "Equinox Bugs", "url": "https://docs.google.com/...", "source": "Google Drive", "category": "Bugs & feedback" }]
+}
+```
 
 See `design/brief.md` for the bigger picture and `CLAUDE.md` for design decisions.

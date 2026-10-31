@@ -1,8 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronRight, X } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { STATUS_LABEL, type SessionStatus } from "@/lib/status";
 import type { Session } from "@/lib/store";
+import { cn } from "@/lib/utils";
 
 type Conn = "connecting" | "live" | "polling";
 
@@ -88,6 +98,7 @@ const byPlace = (a: Session, b: Session) =>
 export default function Dashboard() {
   const { sessions, setSessions, skew, conn } = useSessions();
   const now = useNow(skew);
+  const [endedOpen, setEndedOpen] = useState(false);
 
   const { live, ended } = useMemo(() => {
     const live = sessions.filter((s) => s.status !== "ended").sort(byPlace);
@@ -118,30 +129,51 @@ export default function Dashboard() {
   };
 
   return (
-    <main>
-      <header>
-        <h1>Mondo</h1>
-        <span className={`conn conn-${conn}`} title="Connection to Mondo server">
-          {conn === "live" ? "live" : conn === "polling" ? "reconnecting…" : "connecting…"}
-        </span>
-      </header>
+    <>
+      <PageHeader title="Sessions">
+        {attention > 0 && <Badge className={STATUS_CLASS.waiting}>{attention} need you</Badge>}
+        <ConnIndicator conn={conn} />
+      </PageHeader>
 
-      {live.length === 0 ? (
-        <p className="empty">
-          No active Claude Code sessions. Start <code>claude</code> in a project folder and it will
-          appear here.
-        </p>
-      ) : (
-        <SessionTable sessions={live} now={now} onSystem={saveSystem} />
-      )}
+      <div className="space-y-6 p-4 md:p-6">
+        {live.length === 0 ? (
+          <Card className="p-6 text-sm text-muted-foreground">
+            No active Claude Code sessions. Start <code className="rounded bg-muted px-1">claude</code> in a project
+            folder and it will appear here.
+          </Card>
+        ) : (
+          <SessionTable sessions={live} now={now} onSystem={saveSystem} />
+        )}
 
-      {ended.length > 0 && (
-        <details className="ended">
-          <summary>Ended ({ended.length})</summary>
-          <SessionTable sessions={ended} now={now} onSystem={saveSystem} onForget={forget} />
-        </details>
-      )}
-    </main>
+        {ended.length > 0 && (
+          <Collapsible open={endedOpen} onOpenChange={setEndedOpen}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
+                <ChevronRight className={cn("transition-transform", endedOpen && "rotate-90")} />
+                Ended ({ended.length})
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2 opacity-80">
+              <SessionTable sessions={ended} now={now} onSystem={saveSystem} onForget={forget} />
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+      </div>
+    </>
+  );
+}
+
+function ConnIndicator({ conn }: { conn: Conn }) {
+  return (
+    <span className="flex items-center gap-1.5 text-xs text-muted-foreground" title="Connection to Mondo server">
+      <span
+        className={cn(
+          "size-2 rounded-full",
+          conn === "live" ? "bg-emerald-500" : conn === "polling" ? "bg-amber-500" : "bg-muted-foreground",
+        )}
+      />
+      {conn === "live" ? "live" : conn === "polling" ? "reconnecting…" : "connecting…"}
+    </span>
   );
 }
 
@@ -157,54 +189,74 @@ function SessionTable({
   onForget?: (id: string) => void;
 }) {
   return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Project</th>
-            <th>Folder</th>
-            <th>Branch</th>
-            <th>Status</th>
-            <th>Last activity</th>
-            <th>System</th>
-            {onForget && <th aria-label="Remove" />}
-          </tr>
-        </thead>
-        <tbody>
+    <Card className="py-0">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="pl-4">Project</TableHead>
+            <TableHead>Folder</TableHead>
+            <TableHead>Branch</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Last activity</TableHead>
+            <TableHead className="w-56">System</TableHead>
+            {onForget && <TableHead className="w-10" aria-label="Remove" />}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {sessions.map((s) => (
-            <tr key={s.id} className={`row-${s.status}`}>
-              <td>{s.project ?? <span className="muted">—</span>}</td>
-              <td title={s.cwd}>{s.worktree || <span className="muted">—</span>}</td>
-              <td className="mono">{s.branch ?? <span className="muted">—</span>}</td>
-              <td>
-                <StatusBadge status={s.status} title={s.lastMessage ?? undefined} />
-              </td>
-              <td className="nowrap" title={new Date(s.lastActivity).toLocaleString()}>
+            <TableRow key={s.id}>
+              <TableCell className="pl-4 font-medium">
+                {s.project ?? <span className="text-muted-foreground">—</span>}
+              </TableCell>
+              <TableCell title={s.cwd}>{s.worktree || <span className="text-muted-foreground">—</span>}</TableCell>
+              <TableCell className="font-mono text-xs">
+                {s.branch ?? <span className="text-muted-foreground">—</span>}
+              </TableCell>
+              <TableCell>
+                <StatusBadge status={s.status} message={s.lastMessage} />
+              </TableCell>
+              <TableCell className="whitespace-nowrap text-muted-foreground" title={new Date(s.lastActivity).toLocaleString()}>
                 {ago(now - s.lastActivity)}
-              </td>
-              <td>
+              </TableCell>
+              <TableCell>
                 <SystemField value={s.system} onSave={(v) => onSystem(s.id, v)} />
-              </td>
+              </TableCell>
               {onForget && (
-                <td>
-                  <button className="forget" onClick={() => onForget(s.id)} title="Remove from list">
-                    ×
-                  </button>
-                </td>
+                <TableCell>
+                  <Button variant="ghost" size="icon" className="size-7" onClick={() => onForget(s.id)} title="Remove from list">
+                    <X />
+                  </Button>
+                </TableCell>
               )}
-            </tr>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </TableBody>
+      </Table>
+    </Card>
   );
 }
 
-function StatusBadge({ status, title }: { status: SessionStatus; title?: string }) {
-  return (
-    <span className={`badge badge-${status}`} title={title}>
+const STATUS_CLASS: Record<SessionStatus, string> = {
+  idle: "bg-muted text-muted-foreground",
+  working: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200",
+  waiting: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
+  needs_permission: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200",
+  ended: "bg-muted text-muted-foreground/70",
+};
+
+function StatusBadge({ status, message }: { status: SessionStatus; message: string | null }) {
+  const badge = (
+    <Badge className={cn("border-transparent", STATUS_CLASS[status])}>
+      {status === "working" && <span className="size-1.5 animate-pulse rounded-full bg-current" />}
       {STATUS_LABEL[status]}
-    </span>
+    </Badge>
+  );
+  if (!message) return badge;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{badge}</TooltipTrigger>
+      <TooltipContent>{message}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -223,8 +275,8 @@ function SystemField({ value, onSave }: { value: string; onSave: (v: string) => 
   };
 
   return (
-    <input
-      className="system"
+    <Input
+      className="h-8"
       value={draft}
       placeholder="e.g. netcode"
       maxLength={200}
