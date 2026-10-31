@@ -1,0 +1,16 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 4317
+  },
+  "projects": [
+    {
+      "name": "EQX-Net",
+      "path": "C:/Users/alecv/Documents/Projects/eqx-net/eqx-net"
+    },
+    {
+      "name": "Mondo",
+      "path": "C:/Users/alecv/Documents/Projects/mondoshawan/mondoshawan"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+# Mondoshawan (Mondo)
+
+A Windows desktop app that monitors local Claude Code sessions. See `design/brief.md` for purpose, principles and phases.
+
+## Layout
+- This folder (`Projects/mondoshawan/mondoshawan`) is the git repo. The outer `Projects/mondoshawan/` wrapper holds large material that stays out of the repo, the same pattern as `eqx-net/eqx-net`.
+- `app/`: Next.js App Router (UI + API routes). `lib/`: server logic (config, paths, git, matching, store). `hooks/mondo-hook.js`: the Claude Code hook. `scripts/`: CLI helpers. `electron/`: desktop window.
+
+## Decisions (do not undo without discussion)
+- **Next.js is the app; Electron is just a window.** Electron starts the Next server if nothing answers on the port, then loads it. The server must stay runnable alone (`npm run server`) for Phase 3 (phone over LAN).
+- **Bind 127.0.0.1:4317 by default.** Host and port come from `MONDO_HOST`/`MONDO_PORT`, then from `mondo.config.json` `server`. LAN access needs auth first (Phase 3).
+- **Mondo never starts, stops or controls Claude Code sessions** in the MVP.
+- **Hook script has no dependencies, a 1s timeout, swallows all errors, always exits 0, and prints nothing.** It is registered globally in `~/.claude/settings.json` by `scripts/install-hooks.mjs`, which does a dry run by default, backs up the file before changing it, merges, and can be undone with `scripts/uninstall-hooks.mjs`. Mondo's entries are identified by `mondo-hook.js` in the command.
+- **Hooks are `async: true`** (non-blocking), except SessionEnd, which is sync so it gets sent before the process exits.
+- **Events:** SessionStart, UserPromptSubmit, PostToolUse, Stop, Notification, SessionEnd. PostToolUse is there because no hook fires when a permission prompt is answered.
+- **Storage is `data/state.json`** (gitignored), with atomic writes. No native modules (no better-sqlite3) until we deliberately move to SQLite.
+- **Paths are normalised before comparing:** `/c/x` → `c:/x`, backslashes become forward slashes, everything lowercase, no trailing slash.
+- **A session matches the project** whose path or worktree path is the longest prefix of its cwd.
+- **Live updates use Server-Sent Events** (`/api/stream`), with polling as a fallback.
+
+## Commands
+- `npm run dev`: Electron window plus the Next dev server.
+- `npm run server` / `npm run server:dev`: server only.
+- `npm run check:projects`: verify registered projects, branches and worktrees.
+- `npm run fake -- <scenario>`: fire fake hook events.
+- `npm run hooks:install` (dry run), then `npm run hooks:install -- --apply`; `npm run hooks:uninstall`.
+- `npm test`: vitest.
+
+## Notes
+- Next.js 16: route handler `params` is a Promise.
+- Server-side singletons live on `globalThis`, so they survive dev module reloads.
