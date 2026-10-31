@@ -20,7 +20,12 @@ import {
   SidebarMenuSubItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import { MondoMark } from "@/components/elements";
 import { ThemeToggle } from "@/components/theme-toggle";
+
+// Active nav item: Leeloo orange with a lit edge.
+const NAV_ACTIVE =
+  "data-[active=true]:text-leeloo data-[active=true]:shadow-[inset_2px_0_0_var(--leeloo)] data-[active=true]:font-semibold";
 
 export interface SidebarProject {
   name: string;
@@ -44,7 +49,7 @@ function NavItem({
   const active = exact ? pathname === href : pathname === href || pathname.startsWith(href + "/");
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild isActive={active} tooltip={label}>
+      <SidebarMenuButton asChild isActive={active} tooltip={label} className={NAV_ACTIVE}>
         <Link href={href}>
           <Icon />
           <span>{label}</span>
@@ -64,12 +69,10 @@ export function AppSidebar({ projects }: { projects: SidebarProject[] }) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <MonitorDot className="size-4" />
-                </div>
+                <MondoMark className="size-8 shrink-0" />
                 <div className="grid flex-1 text-left leading-tight">
-                  <span className="truncate font-semibold">Mondo</span>
-                  <span className="truncate text-xs text-muted-foreground">Mondoshawan</span>
+                  <span className="display glow truncate text-sm font-bold text-leeloo">Mondo</span>
+                  <span className="readout truncate">Mondoshawan</span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -79,7 +82,7 @@ export function AppSidebar({ projects }: { projects: SidebarProject[] }) {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Monitor</SidebarGroupLabel>
+          <SidebarGroupLabel className="readout">Monitor</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <NavItem href="/" label="Sessions" icon={MonitorDot} exact />
@@ -88,7 +91,7 @@ export function AppSidebar({ projects }: { projects: SidebarProject[] }) {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Knowledge</SidebarGroupLabel>
+          <SidebarGroupLabel className="readout">Knowledge</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <NavItem href="/knowledge" label="Knowledge base" icon={Library} exact />
@@ -98,7 +101,7 @@ export function AppSidebar({ projects }: { projects: SidebarProject[] }) {
                     const href = `/knowledge/${p.slug}`;
                     return (
                       <SidebarMenuSubItem key={p.slug}>
-                        <SidebarMenuSubButton asChild isActive={pathname === href}>
+                        <SidebarMenuSubButton asChild isActive={pathname === href} className={NAV_ACTIVE}>
                           <Link href={href}>
                             <BookOpen />
                             <span>{p.name}</span>
@@ -114,7 +117,7 @@ export function AppSidebar({ projects }: { projects: SidebarProject[] }) {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Coming soon</SidebarGroupLabel>
+          <SidebarGroupLabel className="readout">Coming soon</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <NavItem href="/design" label="Design docs" icon={PenTool} />

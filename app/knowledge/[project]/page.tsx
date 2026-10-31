@@ -15,9 +15,9 @@ export default async function ProjectKnowledgePage({ params }: { params: Promise
 
   return (
     <>
-      <PageHeader title={`${project.name} · Knowledge`} />
+      <PageHeader title={project.name} kicker="Knowledge base" />
       <div className="space-y-6 p-4 md:p-6">
-        <p className="max-w-2xl break-all text-sm text-muted-foreground">{project.path}</p>
+        <p className="readout max-w-2xl break-all normal-case">{project.path}</p>
         <KnowledgeStats sources={sources} groupBy="origin" />
         <KnowledgeBrowser sources={sources} />
       </div>

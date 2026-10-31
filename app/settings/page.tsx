@@ -27,18 +27,18 @@ export default async function SettingsPage() {
 
   return (
     <>
-      <PageHeader title="Settings" />
+      <PageHeader title="Settings" kicker="Control room" />
       <div className="grid gap-4 p-4 md:p-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               Claude Code hooks
               {allHooks ? (
-                <Badge variant="secondary" className="text-emerald-700 dark:text-emerald-400">
+                <Badge variant="secondary" className="text-earth">
                   <CheckCircle2 /> Installed
                 </Badge>
               ) : someHooks ? (
-                <Badge variant="secondary" className="text-amber-700 dark:text-amber-400">
+                <Badge variant="secondary" className="text-taxi">
                   <CircleAlert /> Partly installed
                 </Badge>
               ) : (

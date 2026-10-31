@@ -14,6 +14,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { KnowledgeSource } from "@/lib/knowledge";
 import { cn } from "@/lib/utils";
 
+// Active filter chip: lit orange.
+const CHIP_ON = "bg-leeloo/15 text-leeloo hover:bg-leeloo/20 hover:text-leeloo";
+
 // Kept in sync with CATEGORY_ORDER in lib/knowledge.ts (that module is server-only).
 const CATEGORY_ORDER = [
   "Design", "Plans", "Architecture", "Features", "Handoffs", "Bugs & feedback",
@@ -45,16 +48,16 @@ function FilterChips({
   const total = [...counts.values()].reduce((a, b) => a + b, 0);
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="mr-1 text-xs font-medium text-muted-foreground">{label}</span>
-      <Button size="sm" variant={value === null ? "secondary" : "ghost"} className="h-7" onClick={() => onChange(null)}>
+      <span className="readout mr-1 w-16">{label}</span>
+      <Button size="sm" variant="ghost" className={cn("h-7 rounded-sm", value === null && CHIP_ON)} onClick={() => onChange(null)}>
         All <span className="text-muted-foreground">{total}</span>
       </Button>
       {keys.map((k) => (
         <Button
           key={k}
           size="sm"
-          variant={value === k ? "secondary" : "ghost"}
-          className="h-7"
+          variant="ghost"
+          className={cn("h-7 rounded-sm", value === k && CHIP_ON)}
           onClick={() => onChange(value === k ? null : k)}
         >
           {k} <span className="text-muted-foreground">{counts.get(k)}</span>
@@ -125,11 +128,11 @@ export function KnowledgeBrowser({ sources, showProject = false }: { sources: Kn
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="pl-4">Title</TableHead>
-              {showProject && <TableHead>Project</TableHead>}
-              <TableHead>Category</TableHead>
-              <TableHead>Source</TableHead>
-              <TableHead className="text-right pr-4">Updated</TableHead>
+              <TableHead className="readout pl-4">Title</TableHead>
+              {showProject && <TableHead className="readout">Project</TableHead>}
+              <TableHead className="readout">Category</TableHead>
+              <TableHead className="readout">Source</TableHead>
+              <TableHead className="readout pr-4 text-right">Updated</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -141,10 +144,10 @@ export function KnowledgeBrowser({ sources, showProject = false }: { sources: Kn
               </TableRow>
             )}
             {visible.map((s) => (
-              <TableRow key={`${s.projectSlug}/${s.id}`} className="cursor-pointer" onClick={() => open(s)}>
+              <TableRow key={`${s.projectSlug}/${s.id}`} className="group/row cursor-pointer" onClick={() => open(s)}>
                 <TableCell className="max-w-0 w-full pl-4 whitespace-normal">
                   <div className="flex items-center gap-2">
-                    <span className="truncate font-medium">{s.title}</span>
+                    <span className="truncate font-semibold group-hover/row:text-leeloo">{s.title}</span>
                     {s.url && !s.hasContent && <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />}
                     {s.flags.map((f) => (
                       <Badge key={f} variant="outline" className="shrink-0 text-[10px] uppercase text-muted-foreground">
@@ -156,7 +159,7 @@ export function KnowledgeBrowser({ sources, showProject = false }: { sources: Kn
                 </TableCell>
                 {showProject && <TableCell className="text-muted-foreground">{s.project}</TableCell>}
                 <TableCell>
-                  <Badge variant="secondary">{s.category}</Badge>
+                  <Badge variant="outline" className="rounded-sm border-brass/40 text-brass">{s.category}</Badge>
                 </TableCell>
                 <TableCell>
                   <span className="flex items-center gap-1.5 text-muted-foreground">
@@ -164,7 +167,7 @@ export function KnowledgeBrowser({ sources, showProject = false }: { sources: Kn
                     {s.originLabel}
                   </span>
                 </TableCell>
-                <TableCell className="pr-4 text-right whitespace-nowrap text-muted-foreground" title={s.modified ?? ""}>
+                <TableCell className="pr-4 text-right font-mono text-xs whitespace-nowrap text-muted-foreground" title={s.modified ?? ""}>
                   {since(s.modified)}
                 </TableCell>
               </TableRow>
@@ -205,7 +208,7 @@ function DocSheet({ source, onClose }: { source: KnowledgeSource | null; onClose
         {source && (
           <>
             <SheetHeader className="border-b">
-              <SheetTitle className="pr-8">{source.title}</SheetTitle>
+              <SheetTitle className="display pr-8 text-base text-leeloo">{source.title}</SheetTitle>
               <SheetDescription asChild>
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <Badge variant="secondary">{source.category}</Badge>
@@ -244,7 +247,7 @@ function DocSheet({ source, onClose }: { source: KnowledgeSource | null; onClose
               {error && <p className="text-sm text-destructive">Couldn&apos;t load this document.</p>}
               {!doc && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
               {doc && (
-                <article className="prose prose-sm max-w-none break-words dark:prose-invert prose-pre:overflow-x-auto prose-table:block prose-table:overflow-x-auto">
+                <article className="prose prose-sm max-w-none break-words dark:prose-invert prose-headings:font-[family-name:var(--ff-display)] prose-headings:uppercase prose-headings:tracking-wider prose-headings:text-leeloo prose-a:text-diva prose-strong:text-foreground prose-code:text-taxi prose-pre:overflow-x-auto prose-table:block prose-table:overflow-x-auto">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{

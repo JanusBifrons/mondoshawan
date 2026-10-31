@@ -22,13 +22,13 @@ export function KnowledgeStats({
         const latest = items.reduce<string | null>((a, s) => (s.modified && (!a || s.modified > a) ? s.modified : a), null);
         const origins = [...new Set(items.map((s) => s.originLabel))];
         const card = (
-          <Card className="gap-2 py-4 transition-colors hover:bg-accent/40">
+          <Card className="gap-2 py-4 transition-shadow hover:ring-leeloo/70 hover:shadow-[0_0_24px_var(--glow)]">
             <CardHeader className="px-4">
-              <CardDescription className="flex items-center gap-1.5">
+              <CardDescription className="readout flex items-center gap-1.5">
                 {groupBy === "origin" && <OriginIcon origin={items[0].origin} />}
                 {name}
               </CardDescription>
-              <CardTitle className="text-2xl tabular-nums">{items.length}</CardTitle>
+              <CardTitle className="font-mono text-4xl leading-none text-leeloo tabular-nums">{items.length}</CardTitle>
             </CardHeader>
             <CardContent className="px-4 text-xs text-muted-foreground">
               {groupBy === "project" ? origins.join(" · ") : "sources"} · updated {since(latest)}

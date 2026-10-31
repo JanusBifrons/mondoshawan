@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, X } from "lucide-react";
+import { ELEMENT_NAME, ELEMENT_TEXT, ElementGlyph, MondoMark, STATUS_ELEMENT } from "@/components/elements";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -130,16 +131,27 @@ export default function Dashboard() {
 
   return (
     <>
-      <PageHeader title="Sessions">
-        {attention > 0 && <Badge className={STATUS_CLASS.waiting}>{attention} need you</Badge>}
+      <PageHeader title="Sessions" kicker="Monitor">
+        {attention > 0 && (
+          <span className="flex items-center gap-2 rounded-sm bg-taxi px-2 py-1 text-xs font-bold uppercase tracking-wider text-black">
+            <span className="hazard h-3 w-3 rounded-[2px]" />
+            {attention} need{attention === 1 ? "s" : ""} you
+          </span>
+        )}
         <ConnIndicator conn={conn} />
       </PageHeader>
 
       <div className="space-y-6 p-4 md:p-6">
-        {live.length === 0 ? (
-          <Card className="p-6 text-sm text-muted-foreground">
-            No active Claude Code sessions. Start <code className="rounded bg-muted px-1">claude</code> in a project
-            folder and it will appear here.
+        <StatusTiles sessions={live} />
+
+        {live.length === 0 && conn === "connecting" ? null : live.length === 0 ? (
+          <Card className="items-center gap-3 px-6 py-12 text-center">
+            <MondoMark className="size-16 opacity-80" />
+            <p className="display text-sm font-bold text-leeloo">All quiet in the city</p>
+            <p className="max-w-md text-sm text-muted-foreground">
+              No Claude Code sessions are running. Start <code className="rounded-sm bg-muted px-1 font-mono">claude</code>{" "}
+              in a project folder and it lands here within a second.
+            </p>
           </Card>
         ) : (
           <SessionTable sessions={live} now={now} onSystem={saveSystem} />
@@ -148,12 +160,13 @@ export default function Dashboard() {
         {ended.length > 0 && (
           <Collapsible open={endedOpen} onOpenChange={setEndedOpen}>
             <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="-ml-2 text-muted-foreground">
+              <Button variant="ghost" size="sm" className="readout -ml-2 hover:text-leeloo">
                 <ChevronRight className={cn("transition-transform", endedOpen && "rotate-90")} />
+                <ElementGlyph element="water" className="size-3.5 text-water" />
                 Ended ({ended.length})
               </Button>
             </CollapsibleTrigger>
-            <CollapsibleContent className="mt-2 opacity-80">
+            <CollapsibleContent className="mt-2 opacity-75">
               <SessionTable sessions={ended} now={now} onSystem={saveSystem} onForget={forget} />
             </CollapsibleContent>
           </Collapsible>
@@ -163,19 +176,69 @@ export default function Dashboard() {
   );
 }
 
+const TILE_ORDER: SessionStatus[] = ["needs_permission", "waiting", "working", "idle"];
+
+/** Taxi-dashboard counters: one tile per live status, each with its element. */
+function StatusTiles({ sessions }: { sessions: Session[] }) {
+  const count = (st: SessionStatus) => sessions.filter((s) => s.status === st).length;
+  return (
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {TILE_ORDER.map((st) => {
+        const el = STATUS_ELEMENT[st];
+        const n = count(st);
+        const alert = st === "needs_permission" && n > 0;
+        return (
+          <Card key={st} size="sm" className={cn("gap-1 px-4", alert && "glow-box")}>
+            {alert && <div className="hazard absolute inset-x-0 top-0 h-1.5" />}
+            <div className="flex items-center justify-between">
+              <span className="readout">{ELEMENT_NAME[el]}</span>
+              <ElementGlyph
+                element={el}
+                className={cn("size-5", ELEMENT_TEXT[el], st === "working" && n > 0 && "animate-ember")}
+              />
+            </div>
+            <div
+              className={cn(
+                "font-mono text-4xl leading-none tabular-nums",
+                n > 0 ? ELEMENT_TEXT[el] : "text-muted-foreground/50",
+              )}
+            >
+              {String(n).padStart(2, "0")}
+            </div>
+            <div className="text-xs font-medium text-muted-foreground">{STATUS_LABEL[st]}</div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 function ConnIndicator({ conn }: { conn: Conn }) {
   return (
-    <span className="flex items-center gap-1.5 text-xs text-muted-foreground" title="Connection to Mondo server">
+    <span className="readout flex items-center gap-1.5" title="Connection to Mondo server">
       <span
         className={cn(
           "size-2 rounded-full",
-          conn === "live" ? "bg-emerald-500" : conn === "polling" ? "bg-amber-500" : "bg-muted-foreground",
+          conn === "live"
+            ? "animate-ember bg-earth shadow-[0_0_8px_var(--earth)]"
+            : conn === "polling"
+              ? "bg-taxi"
+              : "bg-muted-foreground",
         )}
       />
-      {conn === "live" ? "live" : conn === "polling" ? "reconnecting…" : "connecting…"}
+      {conn === "live" ? "Live" : conn === "polling" ? "Reconnecting" : "Connecting"}
     </span>
   );
 }
+
+// Coloured left edge per element, so a row's state reads at a glance.
+const ROW_EDGE: Record<SessionStatus, string> = {
+  idle: "shadow-[inset_3px_0_0_var(--earth)]",
+  working: "shadow-[inset_3px_0_0_var(--fire)]",
+  waiting: "shadow-[inset_3px_0_0_var(--air)]",
+  needs_permission: "shadow-[inset_3px_0_0_var(--taxi)] bg-taxi/5",
+  ended: "shadow-[inset_3px_0_0_var(--water)]",
+};
 
 function SessionTable({
   sessions,
@@ -192,30 +255,33 @@ function SessionTable({
     <Card className="py-0">
       <Table>
         <TableHeader>
-          <TableRow>
-            <TableHead className="pl-4">Project</TableHead>
-            <TableHead>Folder</TableHead>
-            <TableHead>Branch</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Last activity</TableHead>
-            <TableHead className="w-56">System</TableHead>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="readout pl-4">Project</TableHead>
+            <TableHead className="readout">Folder</TableHead>
+            <TableHead className="readout">Branch</TableHead>
+            <TableHead className="readout">Status</TableHead>
+            <TableHead className="readout">Last activity</TableHead>
+            <TableHead className="readout w-56">System</TableHead>
             {onForget && <TableHead className="w-10" aria-label="Remove" />}
           </TableRow>
         </TableHeader>
         <TableBody>
           {sessions.map((s) => (
-            <TableRow key={s.id}>
-              <TableCell className="pl-4 font-medium">
+            <TableRow key={s.id} className={ROW_EDGE[s.status]}>
+              <TableCell className="pl-4 font-semibold">
                 {s.project ?? <span className="text-muted-foreground">—</span>}
               </TableCell>
               <TableCell title={s.cwd}>{s.worktree || <span className="text-muted-foreground">—</span>}</TableCell>
-              <TableCell className="font-mono text-xs">
+              <TableCell className="font-mono text-xs text-diva">
                 {s.branch ?? <span className="text-muted-foreground">—</span>}
               </TableCell>
               <TableCell>
                 <StatusBadge status={s.status} message={s.lastMessage} />
               </TableCell>
-              <TableCell className="whitespace-nowrap text-muted-foreground" title={new Date(s.lastActivity).toLocaleString()}>
+              <TableCell
+                className="whitespace-nowrap font-mono text-xs text-muted-foreground"
+                title={new Date(s.lastActivity).toLocaleString()}
+              >
                 {ago(now - s.lastActivity)}
               </TableCell>
               <TableCell>
@@ -223,7 +289,13 @@ function SessionTable({
               </TableCell>
               {onForget && (
                 <TableCell>
-                  <Button variant="ghost" size="icon" className="size-7" onClick={() => onForget(s.id)} title="Remove from list">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 hover:text-destructive"
+                    onClick={() => onForget(s.id)}
+                    title="Remove from list"
+                  >
                     <X />
                   </Button>
                 </TableCell>
@@ -237,17 +309,22 @@ function SessionTable({
 }
 
 const STATUS_CLASS: Record<SessionStatus, string> = {
-  idle: "bg-muted text-muted-foreground",
-  working: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200",
-  waiting: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
-  needs_permission: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200",
-  ended: "bg-muted text-muted-foreground/70",
+  idle: "border-earth/40 bg-earth/10 text-earth",
+  working: "border-fire/50 bg-fire/15 text-fire",
+  waiting: "border-air/50 bg-air/10 text-air",
+  needs_permission: "border-transparent bg-taxi text-black",
+  ended: "border-water/30 bg-water/10 text-water/80",
 };
 
 function StatusBadge({ status, message }: { status: SessionStatus; message: string | null }) {
+  const el = STATUS_ELEMENT[status];
   const badge = (
-    <Badge className={cn("border-transparent", STATUS_CLASS[status])}>
-      {status === "working" && <span className="size-1.5 animate-pulse rounded-full bg-current" />}
+    <Badge
+      variant="outline"
+      className={cn("gap-1.5 rounded-sm font-semibold uppercase tracking-wide", STATUS_CLASS[status])}
+      title={message ? undefined : `${ELEMENT_NAME[el]} · ${STATUS_LABEL[status]}`}
+    >
+      <ElementGlyph element={el} className={cn("size-3", status === "working" && "animate-ember")} strokeWidth={2.5} />
       {STATUS_LABEL[status]}
     </Badge>
   );

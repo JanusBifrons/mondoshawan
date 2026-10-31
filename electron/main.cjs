@@ -132,7 +132,7 @@ async function ensureBuild(win) {
 const statusPage = (msg) =>
   "data:text/html;charset=utf-8," +
   encodeURIComponent(
-    `<html><body style="font:15px system-ui;background:#111317;color:#e6e8eb;display:grid;place-items:center;height:100vh;margin:0">
+    `<html><body style="font:15px system-ui;background:#0f1424;color:#f0e6d2;display:grid;place-items:center;height:100vh;margin:0">
      <div>${msg}</div></body></html>`,
   );
 
@@ -142,7 +142,7 @@ async function createWindow() {
     width: 1150,
     height: 720,
     title: "Mondo",
-    backgroundColor: "#111317",
+    backgroundColor: "#0f1424",
     icon: path.join(root, "assets", "mondo.ico"),
     autoHideMenuBar: true,
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },

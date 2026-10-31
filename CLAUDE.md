@@ -27,6 +27,19 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
 - **Layout:** `app/layout.tsx` wraps every page in the sidebar (`components/app-sidebar.tsx`). Each page renders its own `<PageHeader>`.
 - **Pages:** Sessions (`/`), Knowledge base (`/knowledge`, `/knowledge/<project>`), Settings (`/settings`), and "coming soon" placeholders (`/design`, `/roadmap`, `/prompts`).
 
+## Look and feel (Fifth Element theme)
+- **The rule:** Mondo is styled after The Fifth Element (1997). Use original styling only: no film logos, stills or quotes.
+- **Themes:** dark "2263" is the default (deep-space navy, starfield). Light "Temple" is sandstone.
+- **Palette tokens** in `app/globals.css`: `leeloo` (orange, primary), `taxi` (yellow, alerts), `diva` (blue), `brass` (borders/labels), and element colours `fire` / `water` / `air` / `earth` / `fifth`.
+- **Fonts:** Syncopate (`.display` headings), Chakra Petch (UI), Share Tech Mono (`.readout` labels, numbers, branches).
+- **Motifs:**
+  - `.frame` brass corner brackets (on every Card);
+  - `.hazard` taxi stripes for anything that needs the user;
+  - `.beam` orange rule under page titles;
+  - `.glow` / `.glow-box`.
+- **Statuses map to elements** (`components/elements.tsx`): idle = earth, working = fire, waiting = air, needs permission = the fifth, ended = water. `MondoMark` is the logo; `assets/mondo.ico` matches it.
+- **Custom classes and variants:** Tailwind variants (`hover:` etc.) don't apply to the custom classes above. Use utilities for hover states.
+
 ## Knowledge base
 - **What `lib/knowledge.ts` indexes for each project:**
   - git-tracked markdown in the repo (minus `knowledge.exclude` prefixes), dated by last commit;
