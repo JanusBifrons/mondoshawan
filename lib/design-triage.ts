@@ -1,7 +1,7 @@
 import type { ProjectConfig } from "./config";
 import type { DB } from "./db";
 import { DesignError, listOpenQuestions } from "./design";
-import { mondoFolder } from "./design-discuss";
+import { mergedCodeRule, mondoFolder } from "./design-discuss";
 import { jobBrief } from "./design-regenerate";
 import { getJobs, type Job } from "./jobs";
 
@@ -22,12 +22,17 @@ export function triageInstruction(project: ProjectConfig, questions: { id: numbe
     ``,
     ...questions.map((q) => `- Question ${q.id} (on "${q.node}"): ${q.text}`),
     ``,
-    `A question should be DROPPED when any of these is true:`,
-    `1. **Already answered**: the owner has already decided it somewhere. Search before judging: \`${cli(`search '{"text":"<key words>"}'`)}\` covers every node, Intent, question with its answer, and the owner's own words in design talks. Quote where the answer is.`,
-    `2. **Micro detail**: which items go in a list, exact prices, numbers or tuning. That's a default to suggest when it's planned for building, not a decision to ask about now.`,
-    `3. **Not a real decision**: asked for the sake of asking, a duplicate of another open question, or about something that no longer exists.`,
+    `**Check every question on its own, one by one; don't judge them from a few broad searches.** For each question: (a) run at least one \`search\` with its own key words; (b) read the node it's on; (c) check its premise against the merged code. Many questions were raised by agents surveying older code. ${mergedCodeRule(project)}`,
     ``,
-    `Keep every question that is a real open decision changing how something works or how it fits. When unsure, keep it.`,
+    `A question should be DROPPED when any of these is true:`,
+    `1. **Already answered**: the owner has already decided it somewhere. \`${cli(`search '{"text":"<key words>"}'`)}\` covers every node, Intent, question with its answer, and the owner's own words in design talks. Quote where the answer is.`,
+    `2. **Out of date**: the code has changed since it was asked, so its premise is no longer true (e.g. it says something "never heals" but repair now exists). Say what the code does now, with the commit or file.`,
+    `3. **A bug, not a design decision**: it describes something broken or unfinished that obviously just needs fixing (a dead-end button, a fake number on screen, a cap that's defined but not enforced). The note should say it's a bug to fix in the build.`,
+    `4. **Micro detail**: which items go in a list, exact prices, numbers, limits or tuning, or a tooling or hosting choice rather than game design. That's a default to suggest when it's planned for building, not a decision to ask about now.`,
+    `5. **Not a real decision**: asked for the sake of asking, or a duplicate of another open question.`,
+    `A question that bundles several things can be dropped if every part falls under these; if one part is a real decision, keep it and say which part in concerns.`,
+    ``,
+    `Keep a question only if it is a real open design decision that changes how something works or how it fits. When genuinely unsure, keep it, but don't keep things just because checking them is effort.`,
     `You can't change anything (the design CLI is read-only for you). Return the questions to drop, each with the reason and a one-line answer to record when the owner dismisses it, plus a short summary, your confidence and any concerns.`,
   ].join("\n");
 }
@@ -42,7 +47,7 @@ export const TRIAGE_SCHEMA = {
         type: "object",
         properties: {
           question: { type: "number" },
-          reason: { type: "string", description: "Why it should go, short and plain (say where it's already answered)." },
+          reason: { type: "string", description: "Why it should go, short and plain: already answered (where), out of date (what the code does now), a bug, micro detail, or not a real decision." },
           answer: { type: "string", description: "The one-line note to record on the question when it's dismissed." },
         },
         required: ["question", "reason", "answer"],
