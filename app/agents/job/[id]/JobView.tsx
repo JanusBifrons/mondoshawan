@@ -88,7 +88,7 @@ export default function JobView({ id }: { id: string }) {
 
   const j = d?.job;
   const r = d?.run;
-  const result = (j?.result ?? {}) as { rewritten?: string[]; created?: string[]; concerns?: string[] };
+  const result = (j?.result ?? {}) as { rewritten?: string[]; created?: string[]; gaps?: string[]; gone?: string[]; concerns?: string[] };
 
   return (
     <>
@@ -145,6 +145,26 @@ export default function JobView({ id }: { id: string }) {
                     <span className="readout normal-case">Created: </span>
                     {result.created.join(", ")}
                   </p>
+                )}
+                {!!result.gaps?.length && (
+                  <div>
+                    <span className="readout normal-case">Missing from existing nodes (Update all refreshes them)</span>
+                    <ul className="mt-1 list-disc space-y-1 pl-5">
+                      {result.gaps.map((c, n) => (
+                        <li key={n}>{c}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {!!result.gone?.length && (
+                  <div>
+                    <span className="readout normal-case text-taxi">No longer in the code (your call whether to retire)</span>
+                    <ul className="mt-1 list-disc space-y-1 pl-5">
+                      {result.gone.map((c, n) => (
+                        <li key={n}>{c}</li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
                 {!!result.concerns?.length && (
                   <div>
