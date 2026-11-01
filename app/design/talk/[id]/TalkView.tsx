@@ -361,14 +361,14 @@ export default function TalkView({ id }: { id: string }) {
             <Square /> Stop
           </Button>
         )}
-      </PageHeader>
-      <div className="mx-auto w-full max-w-3xl space-y-4 p-4 md:p-6">
-        <Button asChild variant="ghost" size="sm" className="-ml-2">
-          <Link href={back}>
-            <ArrowLeft /> {talk?.nodeTitle ?? "Design"}
+        {/* The way out lives in the pinned header, so a long talk never means scrolling back up. */}
+        <Button asChild size="sm" variant="outline">
+          <Link href={back} title={`Back to ${talk?.nodeTitle ?? "Design"}`}>
+            <ArrowLeft /> Back
           </Link>
         </Button>
-
+      </PageHeader>
+      <div className="mx-auto w-full max-w-3xl space-y-4 p-4 md:p-6">
         {!talk ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" /> Loading…

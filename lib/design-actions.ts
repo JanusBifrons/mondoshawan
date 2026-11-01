@@ -107,7 +107,7 @@ export function runAction(db: DB, project: string, input: ActionInput, actor: Ac
       let created = 0;
       for (let i = 0; i < parts.length; i++) {
         const sub = parts.slice(0, i + 1).join("/");
-        const found = resolveNode(db, project, sub);
+        const found = resolveNode(db, project, sub, { exact: true });
         if (found) {
           parent = found.id;
           continue;

@@ -122,7 +122,7 @@ export default async function SettingsPage() {
                 <TableRow>
                   <TableHead>Project</TableHead>
                   <TableHead>Drive folder</TableHead>
-                  <TableHead>Last sync</TableHead>
+                  <TableHead className="hidden sm:table-cell">Last sync</TableHead>
                   <TableHead className="text-right">Docs</TableHead>
                 </TableRow>
               </TableHeader>
@@ -130,8 +130,8 @@ export default async function SettingsPage() {
                 {drive.map((d) => (
                   <TableRow key={d.project}>
                     <TableCell className="font-medium">{d.project}</TableCell>
-                    <TableCell>{d.folder ?? <span className="text-muted-foreground">not set</span>}</TableCell>
-                    <TableCell>
+                    <TableCell className="whitespace-normal break-words">{d.folder ?? <span className="text-muted-foreground">not set</span>}</TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       {!d.last ? (
                         <span className="text-muted-foreground">{d.folder ? "never" : "—"}</span>
                       ) : d.last.error ? (
@@ -163,8 +163,8 @@ export default async function SettingsPage() {
                 <TableRow>
                   <TableHead>Project</TableHead>
                   <TableHead>Path</TableHead>
-                  <TableHead>Branch</TableHead>
-                  <TableHead className="text-right">Worktrees</TableHead>
+                  <TableHead className="hidden sm:table-cell">Branch</TableHead>
+                  <TableHead className="hidden text-right sm:table-cell">Worktrees</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -178,9 +178,9 @@ export default async function SettingsPage() {
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell className="font-mono text-xs">{p.path}</TableCell>
-                    <TableCell className="font-mono text-xs">{p.branch ?? "—"}</TableCell>
-                    <TableCell className="text-right">{p.worktrees.length}</TableCell>
+                    <TableCell className="font-mono text-xs whitespace-normal break-all">{p.path}</TableCell>
+                    <TableCell className="hidden font-mono text-xs whitespace-normal break-all sm:table-cell">{p.branch ?? "—"}</TableCell>
+                    <TableCell className="hidden text-right sm:table-cell">{p.worktrees.length}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

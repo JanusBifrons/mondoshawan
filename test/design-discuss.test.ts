@@ -254,3 +254,33 @@ describe("checking against the truth", () => {
     expect(db.prepare("SELECT COUNT(*) n FROM design_revisions").get()).toEqual({ n: 0 });
   });
 });
+
+describe("finding nodes the way agents name them", () => {
+  it("accepts a unique title or path ending, and keeps creating exact", async () => {
+    const { resolveNode } = await import("@/lib/design");
+    const { runAction } = await import("@/lib/design-actions");
+    const db = openDb(":memory:");
+    const game = addNode(db, { project: "Game", title: "The Game" }, HUMAN);
+    const fac = addNode(db, { project: "Game", parentId: game.id, title: "Factions & living world" }, HUMAN);
+    addNode(db, { project: "Game", parentId: fac.id, title: "Robot territory" }, HUMAN);
+    const w1 = addNode(db, { project: "Game", parentId: game.id, title: "Weapons" }, HUMAN);
+    addNode(db, { project: "Game", parentId: fac.id, title: "Weapons" }, HUMAN);
+
+    // The two cards that failed: a parent by bare title, then a new node by bare title.
+    expect(resolveNode(db, "Game", "Factions & living world")?.id).toBe(fac.id);
+    expect(resolveNode(db, "Game", "factions & living world/robot territory")?.title).toBe("Robot territory");
+    applyProposal(db, { name: "Game", path: "/x" }, { node_id: null }, [
+      { action: "add_node", args: { parent: "Factions & living world", title: "Sovereignty structures" } },
+      { action: "write_intent", args: { node: "Sovereignty structures", text: "Only in claimed sectors." } },
+    ]);
+    expect(resolveNode(db, "Game", "Sovereignty structures")).not.toBeNull();
+
+    // Ambiguous: two "Weapons" nodes, so a bare title isn't enough, but a full path is.
+    expect(resolveNode(db, "Game", "Weapons")).toBeNull();
+    expect(resolveNode(db, "Game", "The Game/Weapons")?.id).toBe(w1.id);
+
+    // ensure creates a new top-level "Robot territory" rather than reusing the nested one.
+    runAction(db, "Game", { action: "ensure", path: "Robot territory" }, AGENT);
+    expect(db.prepare("SELECT COUNT(*) n FROM design_nodes WHERE title = 'Robot territory'").get()).toEqual({ n: 2 });
+  });
+});

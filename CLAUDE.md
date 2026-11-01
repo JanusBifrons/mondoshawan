@@ -59,7 +59,7 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
 - **Stack:** shadcn/ui (Radix, `radix-nova` style) and Tailwind v4. Components live in `components/ui/` (add more with `npx shadcn@latest add <name>`). Light/dark mode comes from `next-themes` (class-based, follows the system by default).
 - **Hooks location:** shadcn's React hooks go to `lib/hooks/` (set in `components.json`), because `hooks/` is reserved for the Claude Code hook script.
 - **Layout:** `app/layout.tsx` wraps every page in the sidebar (`components/app-sidebar.tsx`). Each page renders its own `<PageHeader>`.
-- **Mobile:** every page must work at 390px wide with no sideways scroll. The sidebar becomes a drawer that closes on navigation, and a bottom tab bar (`components/mobile-nav.tsx`) shows Agents · Design · Knowledge · Settings.
+- **Mobile:** every page must work at 390px (and 360px) wide with no sideways scroll. Long words, paths and commands wrap (`overflow-wrap: anywhere` in `globals.css`); wide tables hide minor columns below `sm`; tab rows wrap rather than scroll. The way out of a long page stays pinned: the talk page's **Back** sits in the sticky header, and the node panel's close X is sticky. The sidebar becomes a drawer that closes on navigation, and a bottom tab bar (`components/mobile-nav.tsx`) shows Agents · Design · Knowledge · Settings.
 - **Pages:** Agents (`/agents`, the home page; `/` redirects there), with a drill-down per session (`/agents/<sessionId>`); Design bible (`/design`, `/design/<project>`); Knowledge base (`/knowledge`, `/knowledge/<project>`); Settings (`/settings`); and "coming soon" placeholders (`/roadmap`, `/prompts`). The old Sessions page was merged into Agents.
 
 ## Agents page (the fleet)
@@ -117,7 +117,7 @@ Mondo **is** the design bible: a living tree (and web) of design nodes per proje
   - Every write goes through `runAction` (`lib/design-actions.ts`) with an actor.
   - The web API (`POST /api/design/<project>`) always acts as `human`.
   - The CLI (`npm run design`, `scripts/design.ts`) always acts as `agent:<name>`.
-  - Node refs are ids or title paths ("Weapons/Missiles").
+  - Node refs are ids or title paths ("Weapons/Missiles"). `resolveNode` tries the exact path from the top first, then accepts a title or path ending when it matches exactly one node (like `[[links]]`), because agents often name a node by its title alone; that once failed two of the owner's saves. `ensure` uses `{ exact: true }`, so creating along a path never reuses a nested node by mistake.
 - **Writing:** every intent and reality text is plain English that needs zero context: say what the thing is and what it's for first, with no code names or jargon. Link other nodes it mentions with `[[Title]]` or `[[Parent/Title|label]]` (or `[label](node:<id>)`). Links open that node; a link to a missing node shows dotted. Helpers: `lib/design-links.ts`.
 - **Node drill-down:** opens on Reality when the thing is built, otherwise on Intent. Every node has "Talk it through with an agent".
 - **Design pages lead with discussion and questions:** "Start a design discussion" (pick an area or "something new"), then open design questions as cards, then the tree to explore. Chases sit in a collapsed "Follow-ups" section and on each node.
