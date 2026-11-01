@@ -25,8 +25,8 @@ export async function GET(_req: Request, { params }: Ctx) {
 }
 
 /**
- * { action: "say", text } | { action: "decide", jobId, index, approve } | { action: "stop" }.
- * Approving applies the proposal to the design bible, as the owner.
+ * { action: "say", text } | { action: "decide", jobId, index, decision: "draft" | "approve" | "skip" } | { action: "stop" }.
+ * Draft applies the proposal as the owner; approve also signs its Intent and moves the node to approved.
  */
 export async function POST(req: Request, { params }: Ctx) {
   if (isCrossSite(req)) return forbidden();
@@ -46,7 +46,11 @@ export async function POST(req: Request, { params }: Ctx) {
         return Response.json({ talk: say(db, project, id, typeof b.text === "string" ? b.text : "") });
       case "decide":
         if (typeof b.jobId !== "string" || typeof b.index !== "number") return Response.json({ error: "jobId and index required" }, { status: 400 });
-        return Response.json({ talk: decide(db, project, id, b.jobId, b.index, b.approve === true) });
+        {
+          // decision: "draft" | "approve" | "skip" (older pages send approve: true/false).
+          const d = b.decision === "approve" || b.decision === "draft" || b.decision === "skip" ? b.decision : b.approve === true ? "draft" : "skip";
+          return Response.json({ talk: decide(db, project, id, b.jobId, b.index, d) });
+        }
       case "stop":
         return Response.json({ talk: stopTalk(db, id) });
       default:
