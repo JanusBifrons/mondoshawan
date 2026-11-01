@@ -112,6 +112,10 @@ Mondo **is** the design bible: a living tree (and web) of design nodes per proje
   - The web API (`POST /api/design/<project>`) always acts as `human`.
   - The CLI (`npm run design`, `scripts/design.ts`) always acts as `agent:<name>`.
   - Node refs are ids or title paths ("Weapons/Missiles").
+- **Writing:** every intent and reality text is plain English that needs zero context: say what the thing is and what it's for first, with no code names or jargon. Link other nodes it mentions with `[[Title]]` or `[[Parent/Title|label]]` (or `[label](node:<id>)`). Links open that node; a link to a missing node shows dotted. Helpers: `lib/design-links.ts`.
+- **Node drill-down:** opens on Reality when the thing is built, otherwise on Intent. Every node has "Talk it through with an agent".
+- **Design pages lead with discussion and questions:** "Start a design discussion" (pick an area or "something new"), then open design questions as cards, then the tree to explore. Chases sit in a collapsed "Follow-ups" section and on each node.
+- **Discussions** (`lib/design-discuss.ts`, `POST /api/design/<project>/discuss`) start a Mondo agent in Mondo's own folder, briefed on the node (or the project) with the design CLI. It reads the game's code read-only, asks before writing to the bible, and is linked from the node's Links.
 - **Live refresh:** every change logs a `design_events` row. `/api/design/<project>/stream` polls `MAX(id)`, so CLI writes from other processes show up too.
 - **Priority, chases and links (so nothing goes stale):**
   - Every node has a **priority**: low, normal (default), high or urgent.
@@ -119,7 +123,7 @@ Mondo **is** the design bible: a living tree (and web) of design nodes per proje
   - **External links** (`design_sources`) hold PRs, docs and settings pages, and show on the Links tab.
   - **Surfacing:**
     - Chases due today or overdue show as a badge on Design in the sidebar and the phone tab bar.
-    - `/design` lists open chases across projects.
+    - `/design` lists open chases across projects, collapsed under Follow-ups.
     - Each project page has a chase list, plus "Overdue chases", "High priority" and "Stale ideas" chips in its "needs you" strip. Stale means idea or proposed, untouched for 30 days, with no open chase.
 - **Adding to design tables:** new tables go in `DESIGN_SCHEMA` (`CREATE … IF NOT EXISTS`); new columns go in `DESIGN_COLUMNS` (added if missing on open). Neither takes a numbered migration, so they can't clash with other branches.
 - **Seeding:** the `design-survey` skill (`.claude/skills/design-survey/SKILL.md`) has a Claude session survey one system at a time from the code.

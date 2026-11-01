@@ -969,6 +969,41 @@ export function listOpenChases(db: DB, project?: string): ChaseListItem[] {
   }));
 }
 
+/** An open question with where it lives, for lists across nodes and projects. */
+export interface QuestionListItem extends Question {
+  project: string;
+  nodeTitle: string;
+  nodeStage: Stage;
+  priority: Priority;
+}
+
+/** Open questions (one project, or all), blocking first, then by node priority, newest first. */
+export function listOpenQuestions(db: DB, project?: string): QuestionListItem[] {
+  const rows = db
+    .prepare(
+      `SELECT q.*, n.project AS n_project, n.title AS n_title, n.stage AS n_stage, n.priority AS n_priority
+       FROM design_questions q JOIN design_nodes n ON n.id = q.node_id
+       WHERE q.status = 'open' AND n.stage != 'retired' ${project ? "AND n.project = ?" : ""}`,
+    )
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .all(...(project ? [project] : [])) as any[];
+  const rank: Record<string, number> = { urgent: 3, high: 2, normal: 1, low: 0 };
+  return rows
+    .map((r) => ({
+      ...toQuestion(r),
+      project: r.n_project,
+      nodeTitle: r.n_title,
+      nodeStage: r.n_stage,
+      priority: r.n_priority ?? "normal",
+    }))
+    .sort(
+      (a, b) =>
+        Number(b.blocking) - Number(a.blocking) ||
+        (rank[b.priority] ?? 1) - (rank[a.priority] ?? 1) ||
+        b.createdAt - a.createdAt,
+    );
+}
+
 export interface Gaps {
   approvedUnbuilt: TreeNode[];
   drifted: TreeNode[];

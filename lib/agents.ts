@@ -51,6 +51,8 @@ export interface SpawnOptions {
   model?: string | null;
   permissionMode: PermissionMode;
   prompt?: string;
+  /** Extra instructions for this agent's job (added to its system prompt at launch). */
+  brief?: string;
 }
 
 interface Row {
@@ -121,7 +123,7 @@ Then: ${p}` : `${move} Then say you're ready and wait for instructions.`;
 }
 
 /** The claude command line for an agent (also used to resume one). */
-export function claudeArgs(a: Agent, opts: { prompt?: string; resume?: boolean }): string[] {
+export function claudeArgs(a: Agent, opts: { prompt?: string; resume?: boolean; brief?: string }): string[] {
   const title = `${a.project}: ${a.name}`;
   const first = opts.resume ? (opts.prompt?.trim() ?? "") : firstMessage(a, opts.prompt);
   return [
@@ -130,7 +132,7 @@ export function claudeArgs(a: Agent, opts: { prompt?: string; resume?: boolean }
     ...(opts.resume ? ["--resume", a.sessionId] : ["--session-id", a.sessionId]),
     "--permission-mode", a.permissionMode,
     ...(a.model ? ["--model", a.model] : []),
-    "--append-system-prompt", agentInstructions(a),
+    "--append-system-prompt", [agentInstructions(a), opts.brief?.trim()].filter(Boolean).join("\n\n"),
     ...(first ? [first] : []),
   ];
 }
@@ -261,7 +263,7 @@ export class AgentManager extends EventEmitter {
       )
       .run(agent.id, agent.name, agent.project, agent.cwd, agent.worktreeName, agent.model,
         agent.permissionMode, agent.sessionId, now, now);
-    this.launch(agent, claudeArgs(agent, { prompt: opts.prompt }));
+    this.launch(agent, claudeArgs(agent, { prompt: opts.prompt, brief: opts.brief }));
     return this.get(agent.id)!;
   }
 
