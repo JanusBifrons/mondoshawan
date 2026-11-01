@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import QRCode from "qrcode";
 import { CheckCircle2, CircleAlert, Cloud, Smartphone, XCircle } from "lucide-react";
-import { remoteInfo, remoteToken } from "@/lib/remote";
+import { remoteInfo } from "@/lib/remote";
 import { listApproved } from "@/lib/devices";
 import { DeviceList } from "@/components/device-list";
 import { getDb } from "@/lib/db";
@@ -192,7 +192,7 @@ export default async function SettingsPage() {
 async function PhoneAccess({ remote }: { remote: boolean }) {
   const info = remoteInfo();
   const url = info.urls[0];
-  const pairUrl = url && !remote ? `${url}/__mondo/pair?t=${encodeURIComponent(remoteToken())}` : null;
+  const pairUrl = url && !remote ? url : null;
   const qr = pairUrl && info.enabled
     ? await QRCode.toString(pairUrl, { type: "svg", margin: 1, color: { dark: "#000000", light: "#ffffff" } })
     : null;
@@ -235,8 +235,8 @@ async function PhoneAccess({ remote }: { remote: boolean }) {
             )}
             <div className="min-w-0 space-y-2">
               <p>
-                Scan with your phone&apos;s camera. The phone shows a 4-digit code and this window asks you to allow it;
-                click <b>Allow</b> if the codes match. Approved phones stay signed in until you revoke them.
+                Open this address on your phone (or scan the code), tap <b>Request access</b>, then click <b>Allow</b>{" "}
+                in this window if the 4-digit codes match. Approved phones stay signed in until you revoke them.
               </p>
               <div className="space-y-1">
                 {info.urls.map((u) => (
@@ -246,10 +246,6 @@ async function PhoneAccess({ remote }: { remote: boolean }) {
                 ))}
                 {info.urls.length === 0 && <p className="text-taxi">No network address found.</p>}
               </div>
-              <p className="text-muted-foreground">
-                The QR code only lets a device <i>ask</i>. To change it, delete{" "}
-                <code className="rounded bg-muted px-1">data/remote-token</code> and restart Mondo.
-              </p>
             </div>
           </div>
         )}

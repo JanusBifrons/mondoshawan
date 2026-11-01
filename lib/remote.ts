@@ -1,12 +1,9 @@
-import crypto from "node:crypto";
-import fs from "node:fs";
 import os from "node:os";
-import path from "node:path";
-import { dataDir, loadConfig } from "./config";
+import { loadConfig } from "./config";
 
 /**
  * Phone access settings, for the Settings page. The gateway itself is
- * scripts/lan-gateway.mjs (started by scripts/serve.mjs); both read the same token file.
+ * scripts/lan-gateway.mjs (started by scripts/serve.mjs).
  */
 
 export interface RemoteInfo {
@@ -31,22 +28,3 @@ export function remoteInfo(): RemoteInfo {
   return { enabled: !!lan.enabled, port, urls: addrs.map((ip) => `http://${ip}:${port}`) };
 }
 
-/** Same logic as loadToken in scripts/lan-gateway.mjs: read data/remote-token, creating it if needed. */
-export function remoteToken(): string {
-  const dir = dataDir();
-  const file = path.join(dir, "remote-token");
-  try {
-    const t = fs.readFileSync(file, "utf8").trim();
-    if (t.length >= 32) return t;
-  } catch {
-    /* create below */
-  }
-  fs.mkdirSync(dir, { recursive: true });
-  const t = crypto.randomBytes(24).toString("base64url");
-  try {
-    fs.writeFileSync(file, t, { flag: "wx" });
-    return t;
-  } catch {
-    return fs.readFileSync(file, "utf8").trim();
-  }
-}

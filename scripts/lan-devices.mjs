@@ -3,7 +3,7 @@
 // checks the table SQL and the pending timeout match.
 // (Not imported by the Next app: a .mjs in its server graph makes the dev server reload in a loop.)
 //
-// Flow: the phone opens the QR link (which carries the pairing token) -> a "pending" device
+// Flow: the phone opens the gateway and taps Request access -> a "pending" device
 // is created with a 4-digit code and the phone gets a cookie holding its own secret ->
 // the PC shows "Allow this phone? code 1234" -> once approved, that cookie is the phone's key.
 // Only a hash of each secret is stored. Revoking a device kills its cookie.
