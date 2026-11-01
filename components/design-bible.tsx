@@ -646,6 +646,12 @@ function NodePanel({
     tabChosen.current = true;
     if (detail.reality) setTab("reality");
   }, [detail]);
+  // Opening a node (often from a link far down another node's text) starts at its top.
+  const topRef = useRef<HTMLDivElement>(null);
+  const loadedId = detail?.node.id;
+  useEffect(() => {
+    if (loadedId) topRef.current?.scrollIntoView({ block: "start" });
+  }, [loadedId]);
   const [adding, setAdding] = useState(false);
 
   if (error) return <p className="p-4 text-sm text-destructive">{error}</p>;
@@ -672,7 +678,7 @@ function NodePanel({
   ];
 
   return (
-    <div className="flex min-h-0 flex-col">
+    <div ref={topRef} className="flex min-h-0 scroll-mt-4 flex-col">
       <div className="space-y-3 border-b p-4">
         <nav className="readout flex flex-wrap items-center gap-1 normal-case">
           {detail.path.slice(0, -1).map((p) => (
