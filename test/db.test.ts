@@ -24,6 +24,7 @@ describe("database", () => {
       "devices",
       "drive_files",
       "drive_syncs",
+      "jobs",
       "sessions",
     ]);
   });

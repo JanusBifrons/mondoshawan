@@ -288,7 +288,7 @@ export function RegenerateButton({
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
-      router.push(`/agents/${encodeURIComponent(d.sessionId)}`);
+      router.push(`/agents/job/${encodeURIComponent(d.jobId)}`);
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);

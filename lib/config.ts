@@ -38,14 +38,23 @@ export function findProject(slug: string): ProjectConfig | undefined {
   return loadConfig().projects.find((p) => projectSlug(p.name) === slug);
 }
 
+export interface JobsConfig {
+  /** Model for background jobs (alias like "sonnet" or a full id). Default "sonnet". */
+  model?: string;
+  /** Effort for background jobs: low | medium | high | xhigh | max. Default "medium". */
+  effort?: string;
+}
+
 export interface MondoConfig {
   server: { host: string; port: number; lan?: { enabled?: boolean; host?: string; port?: number } };
   projects: ProjectConfig[];
+  jobs: JobsConfig;
 }
 
 const DEFAULTS: MondoConfig = {
   server: { host: "127.0.0.1", port: 4317 },
   projects: [],
+  jobs: {},
 };
 
 /** Repo root. The server is always started from here (scripts/serve.mjs sets cwd). */
@@ -76,5 +85,6 @@ export function loadConfig(): MondoConfig {
   const projects = Array.isArray(raw.projects)
     ? raw.projects.filter((p) => p && typeof p.name === "string" && typeof p.path === "string")
     : [];
-  return { server, projects };
+  const jobs: JobsConfig = raw.jobs && typeof raw.jobs === "object" ? raw.jobs : {};
+  return { server, projects, jobs };
 }

@@ -69,6 +69,12 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
 - **No chat in Mondo, on purpose.** Talking to an agent happens in the Claude app; Mondo is the control panel.
 - **Live updates:** `/api/agents/stream` (event `fleet`) pushes on agent and hook changes and re-reads the registry every 5s.
 
+## Background jobs and usage
+- **Two kinds of agent work** (the owner's rule): back-and-forth work ("Talk it through", building) runs as a visible Remote Control agent; small, scoped work with a clear end (Regenerate) runs as an invisible **job**.
+- **Jobs** (`lib/jobs.ts`, table `jobs`): `claude -p --output-format stream-json --verbose` with a fixed instruction on stdin, a background brief (`--append-system-prompt`: nobody is watching, don't ask), a JSON result schema (`--json-schema`, including `confidence` 0–1 and `concerns`), `--permission-mode auto --permission-prompts none`, and `--model`/`--effort` from `mondo.config.json` `jobs` (defaults: sonnet, medium). They're detached and hidden, with output in `data/jobs/<id>.jsonl`. The 3s check parses that log (`lib/job-events.ts`) for progress and the final result, so jobs survive Mondo restarts. Job sessions are left out of the Agents list; they have their own section and drill-down (`/agents/job/<id>`).
+- **Usage is measured in tokens, not money** (the owner's choice; Claude Code's API-equivalent dollar figure is stored in `jobs.cost_usd` but not shown). Per run: model(s), effort, input/output/thinking/cache-write/cache-read tokens, turns, tool calls, wall time and thinking time, plus confidence for jobs. "Total (new)" = input + output + cache written; cache reads are shown apart.
+- **Visible agents' usage** comes from their transcripts (`transcriptUsage`: one count per message id, per model; cached until the file changes). The usage log is `/agents/usage` (`GET /api/usage`, `lib/usage.ts`): totals for 7 days and all time, an average per kind of run, and every run.
+
 ## Look and feel (Fifth Element theme)
 - **The rule:** Mondo is styled after The Fifth Element (1997). Use original styling only: no film logos, stills or quotes.
 - **Themes:** dark "2263" is the default (deep-space navy, starfield). Light "Temple" is sandstone.
@@ -128,7 +134,7 @@ Mondo **is** the design bible: a living tree (and web) of design nodes per proje
 - **Adding to design tables:** new tables go in `DESIGN_SCHEMA` (`CREATE … IF NOT EXISTS`); new columns go in `DESIGN_COLUMNS` (added if missing on open). Neither takes a numbered migration, so they can't clash with other branches.
 - **Seeding:** the `design-survey` skill (`.claude/skills/design-survey/SKILL.md`) has a Claude session survey one system at a time from the code.
 - **Code changed since checked** (`lib/design-freshness.ts`, `GET /api/design/<project>/changes`): for each Built node, Mondo diffs the files its Reality cites as evidence between the commit it was written at and the game's merged code (`origin/main`, fetched read-only at most every 10 minutes; the project folder's checked-out branch is ignored). Changed nodes are marked on their Reality tab and listed on the project page.
-- **Regenerate** (`lib/design-regenerate.ts`, `POST /api/design/<project>/regenerate`): one fixed instruction to re-check nodes against the merged code and rewrite their Reality in the standard style. A button on every built node's Reality tab, plus "Update all" for changed nodes (one agent, up to 40). It never runs on its own (the owner's choice).
+- **Regenerate** (`lib/design-regenerate.ts`, `POST /api/design/<project>/regenerate`): a background **job** with one fixed instruction to re-check nodes against the merged code and rewrite their Reality in the standard style, returning a summary, the nodes rewritten and created, confidence and concerns. A button on every built node's Reality tab, plus "Update all" for changed nodes (one job, up to 40). It never runs on its own (the owner's choice).
 - **Later:** harden and impact jobs; "Produce design document" exports.
 
 ## Launching
