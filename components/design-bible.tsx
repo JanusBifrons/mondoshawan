@@ -238,12 +238,13 @@ function useMinWidth(px: number) {
 
 // ---------- gaps ----------
 
-type GapKey = "drifted" | "openReviews" | "blocking" | "flagged" | "approvedUnbuilt" | "unchecked" | "drafts";
+type GapKey = "drifted" | "openReviews" | "blocking" | "questions" | "flagged" | "approvedUnbuilt" | "unchecked" | "drafts";
 
 const GAPS: { key: GapKey; label: string; test: (n: TreeNode) => boolean; urgent?: boolean }[] = [
   { key: "openReviews", label: "Open reviews", test: (n) => n.openReviews > 0, urgent: true },
   { key: "drifted", label: "Drifted", test: (n) => n.fidelity === "drifted", urgent: true },
   { key: "blocking", label: "Blocking questions", test: (n) => n.blockingQuestions > 0, urgent: true },
+  { key: "questions", label: "Open questions", test: (n) => n.openQuestions > 0 },
   { key: "flagged", label: "Reality flagged", test: (n) => !!n.realityFlag },
   { key: "drafts", label: "Unsigned intent", test: (n) => n.intentDraft },
   { key: "approvedUnbuilt", label: "Approved, not built", test: (n) => n.stage === "approved" },
