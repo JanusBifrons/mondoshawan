@@ -1,14 +1,14 @@
-import { agentViews, otherSessions } from "@/lib/agent-views";
 import { getAgents } from "@/lib/agents";
+import { fleet } from "@/lib/fleet";
 import { sseResponse } from "@/lib/sse";
 import { getStore } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Pushes Mondo's agents plus every other live Claude session on the PC (event "agents")
- * on every change. Claude's session registry changes without telling us, so also re-read
- * it every few seconds.
+ * The whole fleet (event "fleet"): Mondo's agents, your sessions and recently ended ones.
+ * Pushed on every agent or hook change, and re-read every 5s because Claude's session
+ * registry changes without telling us. Unchanged snapshots aren't re-sent.
  */
 export function GET(req: Request) {
   const agents = getAgents();
@@ -18,11 +18,11 @@ export function GET(req: Request) {
     let last = "";
     let closed = false;
     const snapshot = async () => {
-      const body = { agents: agentViews(), others: await otherSessions() };
-      const key = JSON.stringify(body);
+      const items = await fleet();
+      const key = JSON.stringify(items);
       if (closed || key === last) return;
       last = key;
-      send("agents", { ...body, now: Date.now() });
+      send("fleet", { items, now: Date.now() });
     };
     const soon = () => {
       if (timer) return;

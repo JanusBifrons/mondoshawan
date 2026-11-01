@@ -1,33 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ElementGlyph, type Element } from "@/components/elements";
+import { useEffect, useRef, useState } from "react";
+import { ElementGlyph, ELEMENT_NAME, ELEMENT_TEXT, type Element } from "@/components/elements";
 import { Badge } from "@/components/ui/badge";
-import type { AgentView, OtherSessionView } from "@/lib/agent-views";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import type { FleetItem, Shown } from "@/lib/fleet";
 import { cn } from "@/lib/utils";
 
-/** What to show for an agent: Mondo's lifecycle, refined by the hooks once it's running. */
-export type Shown = "starting" | "working" | "waiting" | "needs_permission" | "idle" | "stopped" | "failed";
-
-export function shownStatus(a: AgentView): Shown {
-  if (a.status === "starting") return "starting";
-  if (a.status === "failed") return "failed";
-  if (a.status === "stopped") return "stopped";
-  switch (a.session?.status) {
-    case "working":
-      return "working";
-    case "waiting":
-      return "waiting";
-    case "needs_permission":
-      return "needs_permission";
-    case "ended":
-      return "stopped";
-    default:
-      return "idle";
-  }
-}
-
-export const isLive = (a: AgentView) => a.status === "starting" || a.status === "running" || (a.status === "failed" && !!a.pid);
+export type { FleetItem, Shown };
 
 const ELEMENT: Record<Shown, Element> = {
   starting: "earth",
@@ -45,7 +26,7 @@ export const SHOWN_LABEL: Record<Shown, string> = {
   waiting: "Your move",
   needs_permission: "Needs permission",
   idle: "Idle",
-  stopped: "Stopped",
+  stopped: "Ended",
   failed: "Needs attention",
 };
 
@@ -78,6 +59,85 @@ export function AgentStatusBadge({ shown }: { shown: Shown }) {
   );
 }
 
+/** Who started it: Mondo, or you (and from where). */
+export function Origin({ item }: { item: Pick<FleetItem, "origin" | "from"> }) {
+  const mondo = item.origin === "mondo";
+  return (
+    <span
+      className={cn(
+        "readout rounded-sm border px-1.5 py-0.5 normal-case",
+        mondo ? "border-leeloo/50 text-leeloo" : "border-brass/40 text-brass",
+      )}
+    >
+      {mondo ? "Mondo" : `You · ${item.from}`}
+    </span>
+  );
+}
+
+const TILES: Shown[] = ["needs_permission", "waiting", "working", "idle"];
+
+/** Counters for everything running: one tile per status, each with its element. */
+export function StatusTiles({ items }: { items: FleetItem[] }) {
+  const live = items.filter((i) => i.live);
+  return (
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {TILES.map((st) => {
+        const el = ELEMENT[st];
+        const n = live.filter((i) => i.shown === st || (st === "needs_permission" && i.shown === "failed")).length;
+        const alert = st === "needs_permission" && n > 0;
+        return (
+          <Card key={st} size="sm" className={cn("gap-1 px-4", alert && "glow-box")}>
+            {alert && <div className="hazard absolute inset-x-0 top-0 h-1.5" />}
+            <div className="flex items-center justify-between">
+              <span className="readout">{ELEMENT_NAME[el]}</span>
+              <ElementGlyph element={el} className={cn("size-5", ELEMENT_TEXT[el], st === "working" && n > 0 && "animate-ember")} />
+            </div>
+            <div className={cn("font-mono text-4xl leading-none tabular-nums", n > 0 ? ELEMENT_TEXT[el] : "text-muted-foreground/50")}>
+              {String(n).padStart(2, "0")}
+            </div>
+            <div className="text-xs font-medium text-muted-foreground">{SHOWN_LABEL[st]}</div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Free-text "System" tag (e.g. "netcode"), saved on blur or Enter. */
+export function SystemField({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focused.current) setDraft(value);
+  }, [value]);
+  const commit = () => {
+    const v = draft.trim();
+    if (v !== value) onSave(v);
+  };
+  return (
+    <Input
+      className="h-9"
+      value={draft}
+      placeholder="e.g. netcode"
+      maxLength={200}
+      onFocus={() => (focused.current = true)}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        focused.current = false;
+        commit();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Escape") {
+          setDraft(value);
+          focused.current = false;
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+    />
+  );
+}
+
 export function ago(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
   if (s < 5) return "just now";
@@ -102,31 +162,25 @@ export function useNow(skew: number) {
 /** Last path segment, for showing a folder briefly. */
 export const folderName = (p: string) => p.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? p;
 
-/** Live agent list over SSE: Mondo's agents plus every other running Claude session. */
-export function useAgents() {
-  const [agents, setAgents] = useState<AgentView[] | null>(null);
-  const [others, setOthers] = useState<OtherSessionView[]>([]);
+/** Live fleet over SSE. */
+export function useFleet() {
+  const [items, setItems] = useState<FleetItem[] | null>(null);
   const [skew, setSkew] = useState(0);
   useEffect(() => {
     const es = new EventSource("/api/agents/stream");
-    es.addEventListener("agents", (ev) => {
-      const d = JSON.parse((ev as MessageEvent).data) as { agents: AgentView[]; others: OtherSessionView[]; now: number };
-      setAgents(d.agents);
-      setOthers(d.others ?? []);
+    es.addEventListener("fleet", (ev) => {
+      const d = JSON.parse((ev as MessageEvent).data) as { items: FleetItem[]; now: number };
+      setItems(d.items);
       setSkew(d.now - Date.now());
     });
     return () => es.close();
   }, []);
-  return { agents, others, skew };
+  return { items, skew };
 }
 
-/** Hook status of a session Mondo didn't start, in the same terms as agents. */
-export function shownForSession(status: OtherSessionView["status"]): Shown {
-  return status === "ended" ? "stopped" : status;
-}
-
-export async function agentAction(id: string, body: Record<string, unknown>) {
-  const res = await fetch(`/api/agents/${encodeURIComponent(id)}`, {
+/** Run a high-level action on one session (stop, resume, forget, system). */
+export async function itemAction(sessionId: string, body: Record<string, unknown>) {
+  const res = await fetch(`/api/agents/item/${encodeURIComponent(sessionId)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

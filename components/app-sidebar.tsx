@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
-import { BookOpen, Bot, FolderKanban, GitFork, Library, Map, MonitorDot, PenTool, Settings } from "lucide-react";
+import { BookOpen, Bot, FolderKanban, GitFork, Library, Map, PenTool, Settings } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -73,7 +73,7 @@ export function AppSidebar({ projects, designBadge }: { projects: SidebarProject
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link href="/">
+              <Link href="/agents">
                 <MondoMark className="size-8 shrink-0" />
                 <div className="grid flex-1 text-left leading-tight">
                   <span className="display glow truncate text-sm font-bold text-leeloo">Mondo</span>
@@ -90,7 +90,6 @@ export function AppSidebar({ projects, designBadge }: { projects: SidebarProject
           <SidebarGroupLabel className="readout">Monitor</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <NavItem href="/" label="Sessions" icon={MonitorDot} exact />
               <NavItem href="/agents" label="Agents" icon={Bot} />
             </SidebarMenu>
           </SidebarGroupContent>
