@@ -1,6 +1,6 @@
 # Refinement: how designs get attacked, decided and promoted
 
-Status: **idea being refined** (talked through with the owner on 2026-11-01). Nothing here is built yet.
+Status: **idea being refined** (talked through with the owner on 2026-11-01). Nothing here is built yet. Four of its five open questions are decided (below).
 
 ## Why
 Starting an agent to build something is the easy, last step. The real work is deciding *what* to build:
@@ -54,9 +54,12 @@ Loops (e.g. fight → loot → upgrade → fight) cut across systems. They becom
 - The human answers, signs intent and moves things into or out of canon.
 - Agents write reality only from code, as today.
 
-## Open questions
-- **Abandoning something already built:** how does a "retire this built node" outcome turn into removal work, and who signs it?
-- **The agent's outcome:** is it applied straight away as drafts, or shown as a proposal the human accepts first?
-- **Canon ripple:** does the re-check run automatically on every canon change (cost), or is it queued and flagged "needs re-check" for the human to start?
-- **Lenses:** one agent with several lenses, or one agent per lens, run in parallel?
+## Decided (owner, 2026-11-01)
+The live record is the **Design bible › Refinement** node in Mondo's own design tree, where these are answered questions. This file is a snapshot.
+- **Outcome: shown first.** The agent presents its outcome as a proposal ("split Mines into 3 nodes, abandon Proximity fuse"). Nothing changes until the human accepts it, in whole or in part.
+- **Canon ripple: flagged, and the human starts it.** Affected unapproved nodes get a "needs re-check" mark and appear in a list. The human starts re-checks one at a time or all at once, which keeps agent cost under their control.
+- **Abandoning built things: a removal proposal.** It's proposed as retiring the built node, with the reasons and what removing it involves. If the human signs it, it becomes removal work for a build agent later.
+- **Lenses: one agent, all lenses.** It works through systems/overlaps, gameplay loops, edge cases/abuse and cost/risk in turn, and asks one combined set of questions.
+
+## Still open
 - **Scope:** how does a refinement mark "build up to here now, the rest stays an idea"?
