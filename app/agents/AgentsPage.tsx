@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, ExternalLink, Loader2, Plus, X } from "lucide-react";
+import { ChevronRight, ExternalLink, Loader2, Plus, Square, X } from "lucide-react";
 import { AgentStatusBadge, EDGE, FIELD, ago, folderName, isLive, shownForSession, shownStatus, useAgents, useNow } from "@/components/agent-ui";
 import { MondoMark } from "@/components/elements";
 import { PageHeader } from "@/components/page-header";
@@ -125,9 +125,24 @@ function Origin({ mondo, from }: { mondo?: boolean; from?: string }) {
   );
 }
 
-/** A session you started yourself. Mondo only watches these; chat via Claude if it has Remote Control. */
+/** A session you started yourself: open it in Claude (if Remote Control is on) or stop it. */
 function OtherRow({ s, now }: { s: OtherSessionView; now: number }) {
   const shown = shownForSession(s.status);
+  const [stopping, setStopping] = useState(false);
+  const stop = async () => {
+    const label = s.name ?? s.worktree ?? "this session";
+    if (!confirm(`Stop ${label}? Its Claude closes straight away and anything it's doing is cut off. The conversation is saved; resume it with claude --resume.`)) return;
+    setStopping(true);
+    const r = await fetch(`/api/agents/sessions/${encodeURIComponent(s.sessionId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "stop" }),
+    }).catch(() => null);
+    if (!r?.ok) {
+      alert("Couldn't stop it: it may have already closed.");
+      setStopping(false);
+    }
+  };
   return (
     <Card size="sm" className={cn("gap-2 px-4", EDGE[shown])}>
       <div className="min-w-0 space-y-1">
@@ -142,15 +157,20 @@ function OtherRow({ s, now }: { s: OtherSessionView; now: number }) {
         </div>
         {s.lastMessage && <p className="line-clamp-1 text-xs text-muted-foreground">{s.lastMessage}</p>}
       </div>
-      {s.remoteUrl ? (
-        <Button asChild size="sm" variant="outline" className="w-fit">
-          <a href={s.remoteUrl} target="_blank" rel="noreferrer">
-            <ExternalLink /> Open in Claude
-          </a>
+      <div className="flex flex-wrap items-center gap-2">
+        {s.remoteUrl ? (
+          <Button asChild size="sm" variant="outline">
+            <a href={s.remoteUrl} target="_blank" rel="noreferrer">
+              <ExternalLink /> Open in Claude
+            </a>
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">Remote Control is off, so you can only chat with it at the PC.</span>
+        )}
+        <Button size="sm" variant="ghost" className="ml-auto hover:text-destructive" disabled={stopping} onClick={stop}>
+          {stopping ? <Loader2 className="animate-spin" /> : <Square />} Stop
         </Button>
-      ) : (
-        <p className="text-xs text-muted-foreground">Remote Control is off for this one, so it can only be used at the PC.</p>
-      )}
+      </div>
     </Card>
   );
 }

@@ -208,9 +208,11 @@ function findClaudePid(sessionId: string): Promise<number | null> {
   });
 }
 
-function killTree(pid: number) {
+/** Kill a process and everything it started (Windows: taskkill /T /F). */
+export function stopProcessTree(pid: number) {
   execFile("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true }, () => {});
 }
+const killTree = stopProcessTree;
 
 /** How long a new agent may take to report in through the hooks before we flag it. */
 const START_GRACE_MS = 60_000;
