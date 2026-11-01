@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { dataDir } from "./config";
 import { getDb, type DB } from "./db";
+import { liveSessions } from "./live-sessions";
 import { getStore } from "./store";
 
 /**
@@ -315,7 +316,8 @@ export class AgentManager extends EventEmitter {
         await new Promise((r) => setTimeout(r, 1500));
         const pid = await findClaudePid(agent.sessionId);
         if (pid) {
-          if (this.get(agent.id)?.status === "starting") this.update(agent.id, { pid });
+          const cur = this.get(agent.id);
+          if (cur && !cur.pid && (cur.status === "starting" || cur.status === "running")) this.update(agent.id, { pid });
           return;
         }
       }
@@ -328,7 +330,18 @@ export class AgentManager extends EventEmitter {
   /** Every few seconds: promote agents that reported in, and notice ones that have gone. */
   private check() {
     const now = Date.now();
-    for (const a of this.list()) {
+    const agents = this.list();
+    if (agents.some((a) => !a.pid && (a.status === "starting" || a.status === "running"))) {
+      const live = new Map(liveSessions().map((l) => [l.sessionId, l.pid]));
+      for (const a of agents) {
+        const pid = live.get(a.sessionId);
+        if (!a.pid && pid && (a.status === "starting" || a.status === "running")) {
+          this.update(a.id, { pid });
+          a.pid = pid;
+        }
+      }
+    }
+    for (const a of agents) {
       const stuck = a.status === "failed" && !!a.pid;
       if (a.status !== "starting" && a.status !== "running" && !stuck) continue;
       if (a.pid && !isAlive(a.pid)) {
