@@ -40,6 +40,7 @@ Actions:
   link           {from, to, type, note?}
   unlink         {link}
   source         {node, ref, title?}
+  batch          [{action, ...args}, ...]  run several actions in order (use --file)
 
 stage:    ${STAGES.join(" | ")}
 kind:     ${KINDS.join(" | ")}
@@ -66,18 +67,22 @@ function main() {
     process.exit(2);
   }
 
-  const [projectArg, action, json] = rest;
+  const [projectArg, actionArg, jsonArg] = rest;
+  // `batch`: the JSON is an array of { action, ...args }, run in order (stops at the first error).
+  const isBatch = actionArg === "batch";
+  const action = isBatch ? "tree" : actionArg;
+  const json = jsonArg;
   const project = loadConfig().projects.find((p) => p.name === projectArg || projectSlug(p.name) === projectSlug(projectArg ?? ""));
   if (!project) {
     console.error(`Unknown project "${projectArg}". Known: ${loadConfig().projects.map((p) => p.name).join(", ")}`);
     process.exit(2);
   }
-  if (!action || !(ACTIONS as readonly string[]).includes(action)) {
+  if (!actionArg || (!isBatch && !(ACTIONS as readonly string[]).includes(action))) {
     console.error(`Unknown action "${action ?? ""}".\n\n${HELP}`);
     process.exit(2);
   }
 
-  let args: Record<string, unknown> = {};
+  let args: unknown = {};
   try {
     const raw = file ? fs.readFileSync(file, "utf8") : json;
     if (raw) args = JSON.parse(raw);
@@ -85,10 +90,27 @@ function main() {
     console.error(`Could not read JSON args: ${(err as Error).message}`);
     process.exit(2);
   }
+  if (isBatch && !Array.isArray(args)) {
+    console.error("batch needs a JSON array of { action, ...args }");
+    process.exit(2);
+  }
 
   const db = openDb();
   try {
-    const out = runAction(db, project.name, { ...args, action }, actor);
+    if (isBatch) {
+      const steps = args as { action: string }[];
+      steps.forEach((step, i) => {
+        try {
+          runAction(db, project.name, step, actor);
+        } catch (err) {
+          if (err instanceof DesignError) throw new DesignError(`step ${i + 1} (${step.action}): ${err.message}`, err.status);
+          throw err;
+        }
+      });
+      console.log(JSON.stringify({ ok: true, steps: steps.length }));
+      return;
+    }
+    const out = runAction(db, project.name, { ...(args as object), action }, actor);
     console.log(JSON.stringify(out, null, 2));
   } catch (err) {
     if (err instanceof DesignError) {
