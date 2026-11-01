@@ -42,11 +42,12 @@ describe("design talk brief", () => {
     expect(b).toContain("never change any file");
     expect(b).toContain("leave pure taste");
     expect(b).toContain("can't write to the bible yourself");
-    expect(b).toContain("only when the owner taps Approve");
-    expect(b).toContain("Your goal is a developed design, not notes");
-    expect(b).toContain("Make the calls");
-    expect(b).toContain("Size it to the idea");
-    expect(b).toContain("one proposal per node");
+    expect(b).toContain("only when the owner locks it in");
+    expect(b).toContain("1. Discovery.");
+    expect(b).toContain("Propose nothing in this phase");
+    expect(b).toContain("Lock-down, one aspect at a time");
+    expect(b).toContain("At most one proposal per reply");
+    expect(b).toContain("a developed design, not notes");
   });
 
   it("starts an open talk from the tree", () => {
@@ -73,7 +74,7 @@ describe("talk replies and proposals", () => {
       { action: "write_intent", args: { node: "n1", text: "x" } },
       { action: "ask", args: {} },
     ]);
-    expect(parseTalkResult(null)).toEqual({ reply: null, proposals: [], settled: false });
+    expect(parseTalkResult(null)).toEqual({ reply: null, proposals: [], held: 0, settled: false });
   });
 
   it("applies an approved proposal as the owner, all or nothing", () => {
@@ -157,5 +158,36 @@ describe("one proposal per node", () => {
     ]);
     const rows = db.prepare("SELECT n.title, s.ref FROM design_sources s JOIN design_nodes n ON n.id = s.node_id").all() as { title: string; ref: string }[];
     expect(rows).toEqual([{ title: "Costs", ref: "/design/talk/t1" }]);
+  });
+});
+
+describe("one card at a time, locked in as a draft or approved", () => {
+  it("shows only the first proposal and counts the rest as held", () => {
+    const r = parseTalkResult({
+      reply: "x",
+      settled: false,
+      proposals: [
+        { title: "A", detail: "", actions: [{ action: "write_intent", args: '{"node":"A","text":"a"}' }] },
+        { title: "B", detail: "", actions: [{ action: "write_intent", args: '{"node":"B","text":"b"}' }] },
+      ],
+    });
+    expect(r.proposals.map((p) => p.title)).toEqual(["A"]);
+    expect(r.held).toBe(1);
+  });
+
+  it("approve signs the Intent and moves the node to approved; draft leaves it unsigned", () => {
+    const db = openDb(":memory:");
+    const project = { name: "Game", path: "/x" };
+    const a = addNode(db, { project: "Game", title: "Hosting" }, HUMAN);
+    const b = addNode(db, { project: "Game", title: "Costs" }, HUMAN);
+    applyProposal(db, project, { node_id: null }, [{ action: "write_intent", args: { node: "Hosting", text: "One server." } }], { approve: true });
+    applyProposal(db, project, { node_id: null }, [{ action: "write_intent", args: { node: "Costs", text: "Cheap." } }]);
+    const row = (id: string) =>
+      db.prepare("SELECT n.stage, r.signed_at FROM design_nodes n JOIN design_revisions r ON r.node_id = n.id WHERE n.id = ? ORDER BY r.id DESC").get(id) as { stage: string; signed_at: number | null };
+    expect(row(a.id).stage).toBe("approved");
+    expect(row(a.id).signed_at).not.toBeNull();
+    expect(row(b.id).stage).not.toBe("approved");
+    expect(row(b.id).signed_at).toBeNull();
+    expect(() => applyProposal(db, project, { node_id: a.id }, [{ action: "ask", args: { text: "Why?" } }], { approve: true })).toThrow(/no Intent/);
   });
 });

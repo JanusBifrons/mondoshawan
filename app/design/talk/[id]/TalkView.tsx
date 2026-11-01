@@ -111,7 +111,8 @@ function ActionView({ a, tree, slug }: { a: TalkAction; tree: LinkableNode[]; sl
 
 const PROPOSAL_STATE: Record<Proposal["status"], { label: string; cls: string }> = {
   pending: { label: "Waiting for you", cls: "border-leeloo/60" },
-  approved: { label: "Approved and saved", cls: "border-earth/50 opacity-80" },
+  approved: { label: "Saved as a draft", cls: "border-earth/50 opacity-80" },
+  locked: { label: "Saved and approved", cls: "border-earth opacity-90" },
   skipped: { label: "Skipped", cls: "border-border opacity-60" },
   failed: { label: "Couldn't save", cls: "border-taxi/60" },
 };
@@ -125,7 +126,7 @@ function ProposalCard({
   slug,
 }: {
   p: Proposal;
-  onDecide: (approve: boolean) => void;
+  onDecide: (decision: "draft" | "approve" | "skip") => void;
   /** Start a reply about this part ("that's wrong because ..."). */
   onChange: () => void;
   busy: boolean;
@@ -147,14 +148,17 @@ function ProposalCard({
       </div>
       {p.error && <p className="text-xs text-taxi">{p.error}</p>}
       {p.status === "pending" && (
-        <div className="flex gap-2">
-          <Button size="sm" disabled={busy} onClick={() => onDecide(true)}>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" disabled={busy} onClick={() => onDecide("approve")} title="Save it and sign the Intent: this is how it should be">
             <Check /> Approve
+          </Button>
+          <Button size="sm" variant="secondary" disabled={busy} onClick={() => onDecide("draft")} title="Save it, but leave the Intent unsigned">
+            Save as draft
           </Button>
           <Button size="sm" variant="outline" disabled={busy} onClick={onChange}>
             <PenLine /> Change this
           </Button>
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => onDecide(false)}>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => onDecide("skip")}>
             <X /> Skip
           </Button>
         </div>
@@ -183,7 +187,7 @@ function Turn({
   tree: LinkableNode[];
   slug: string | null;
   busy: boolean;
-  decide: (jobId: string, index: number, approve: boolean) => void;
+  decide: (jobId: string, index: number, decision: "draft" | "approve" | "skip") => void;
 }) {
   return (
     <div className="space-y-3">
@@ -207,7 +211,7 @@ function Turn({
         </Card>
       )}
       {t.proposals.map((p, i) => (
-        <ProposalCard key={i} p={p} busy={busy} tree={tree} slug={slug} onDecide={(approve) => t.jobId && decide(t.jobId, i, approve)} onChange={() => change(p.title)} />
+        <ProposalCard key={i} p={p} busy={busy} tree={tree} slug={slug} onDecide={(decision) => t.jobId && decide(t.jobId, i, decision)} onChange={() => change(p.title)} />
       ))}
       {t.status !== "thinking" && t.error && (
         <p className="whitespace-pre-wrap rounded-md border border-taxi/40 bg-taxi/10 px-3 py-2 text-sm text-taxi">{t.error}</p>
@@ -350,7 +354,7 @@ export default function TalkView({ id }: { id: string }) {
                 tree={tree}
                 slug={slug}
                 busy={busy}
-                decide={(jobId, index, approve) => post({ action: "decide", jobId, index, approve })}
+                decide={(jobId, index, decision) => post({ action: "decide", jobId, index, decision })}
                 change={change}
               />
             ))}
