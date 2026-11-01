@@ -1,3 +1,19 @@
+// Phones paired through the LAN gateway. The gateway (scripts/lan-devices.mjs) runs the same SQL
+// in case it starts first; test/devices.test.ts checks they match.
+export const DEVICES_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS devices (
+    id          TEXT PRIMARY KEY,
+    secret_hash TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    code        TEXT NOT NULL,
+    status      TEXT NOT NULL,
+    ip          TEXT,
+    created_at  INTEGER NOT NULL,
+    decided_at  INTEGER,
+    last_seen   INTEGER
+  );
+`;
+
 /**
  * Ordered schema migrations. Each entry runs once, tracked by `PRAGMA user_version`
  * (entry i brings the database to version i + 1). Append only: never edit or
@@ -49,6 +65,35 @@ export const MIGRATIONS: readonly string[] = [
   );
   CREATE INDEX drive_syncs_project ON drive_syncs(project, started_at);
   `,
+  // 2: agents Mondo runs itself (headless `claude`), and their transcripts
+  `
+  CREATE TABLE agents (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    project         TEXT NOT NULL,
+    cwd             TEXT NOT NULL,
+    worktree_name   TEXT,
+    model           TEXT,
+    permission_mode TEXT NOT NULL,
+    session_id      TEXT NOT NULL,
+    status          TEXT NOT NULL,
+    created_at      INTEGER NOT NULL,
+    last_activity   INTEGER NOT NULL,
+    cost_usd        REAL NOT NULL DEFAULT 0,
+    exit_info       TEXT
+  );
+
+  CREATE TABLE agent_entries (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    at       INTEGER NOT NULL,
+    kind     TEXT NOT NULL,
+    text     TEXT NOT NULL
+  );
+  CREATE INDEX agent_entries_agent ON agent_entries(agent_id, id);
+  `,
+  // 3: phones paired through the LAN gateway
+  DEVICES_TABLE_SQL,
 ];
 
 /**

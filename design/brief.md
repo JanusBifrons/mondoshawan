@@ -8,7 +8,7 @@ Mondoshawan ("Mondo") is a Windows desktop app that monitors the Claude Code ses
 - 3+ Claude Code sessions run at once, each in its own git worktree.
 
 ## Principles
-- **Mondo watches and prepares. It never starts, stops or controls Claude Code sessions** (in the MVP).
+- **Mondo watches the sessions you start, and drives the agents it starts.** Hand-started sessions are watch-only; agents started from Mondo (desktop or phone) can be messaged, interrupted, stopped and resumed.
 - **Never get in the way.** The hook fails silently and fast. If Mondo is closed, Claude Code behaves exactly as normal.
 - **The server is the app.** Next.js serves both the UI and the API, and Electron is only a window. This means the same UI can later be served to a phone.
 - **Keep it simple.** Storage is a JSON file with no native modules, which keeps Electron packaging painless. SQLite comes later.
@@ -16,8 +16,8 @@ Mondoshawan ("Mondo") is a Windows desktop app that monitors the Claude Code ses
 ## Phases
 1. **Foundations.** Repo, docs, and a project registry (`mondo.config.json`). Mondo can read other repos' branches and worktrees.
 2. **Basic app and terminal monitor.** Claude Code hooks POST events to Mondo, and a live dashboard shows each session's project, worktree, branch, status, last activity and a hand-typed "System" tag.
-3. **Mobile access.** Serve the UI over the local network, with auth.
-4. **Open terminals remotely.**
+3. **Mobile access.** Serve the UI over the local network, with auth. *(Built: LAN gateway; phones pair by QR code and must be approved on the PC; phone layouts.)*
+4. **Open terminals remotely.** *(Built as "Agents": headless Claude Code processes Mondo spawns, chats with and stops.)*
 
 Later: prompt preparation, handoff files, knowledge base, design docs, AI features, packaging/installers.
 
