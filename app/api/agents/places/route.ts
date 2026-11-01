@@ -1,6 +1,6 @@
 import { loadConfig, projectSlug } from "@/lib/config";
 import { MODELS, PERMISSION_MODES } from "@/lib/agents";
-import { folderTrust } from "@/lib/claude-trust";
+import { folderTrusted } from "@/lib/claude-trust";
 import { dirExists, listWorktrees } from "@/lib/git";
 import { toNativePath } from "@/lib/paths";
 
@@ -17,10 +17,10 @@ export async function GET() {
         name: p.name,
         path: p.path,
         exists,
-        trusted: folderTrust(p.path).trusted,
+        trusted: folderTrusted(p.path),
         worktrees: worktrees
           .filter((w) => !w.bare)
-          .map((w) => ({ path: w.path, branch: w.branch, trusted: folderTrust(w.path).trusted })),
+          .map((w) => ({ path: w.path, branch: w.branch, trusted: folderTrusted(w.path) })),
       };
     }),
   );

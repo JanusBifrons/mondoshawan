@@ -1,7 +1,7 @@
 import { findProject, projectSlug } from "@/lib/config";
 import { MODELS, PERMISSION_MODES, getAgents, type PermissionMode } from "@/lib/agents";
 import { agentViews } from "@/lib/agent-views";
-import { folderTrust } from "@/lib/claude-trust";
+import { folderTrusted } from "@/lib/claude-trust";
 import { listWorktrees } from "@/lib/git";
 import { forbidden, isCrossSite } from "@/lib/guard";
 import { normalizePath, toNativePath } from "@/lib/paths";
@@ -44,8 +44,7 @@ export async function POST(req: Request) {
   const cwd = places.find((p) => normalizePath(p) === wanted);
   if (!cwd) return Response.json({ error: "folder is not this project or one of its worktrees" }, { status: 400 });
 
-  const trust = folderTrust(cwd);
-  if (!trust.trusted) {
+  if (!folderTrusted(cwd)) {
     return Response.json(
       {
         error: `Claude hasn't been told to trust ${toNativePath(cwd)} yet, so the agent would stop at that question in its window. At the PC, open Git Bash in that folder, run claude once and choose "Yes, I trust this folder".`,

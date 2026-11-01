@@ -1,9 +1,11 @@
-import { getAgents, type Agent } from "./agents";
+import { getAgents, remoteUrl, type Agent } from "./agents";
 import { getDb } from "./db";
 import type { SessionStatus } from "./status";
 
 /** An agent plus what the hooks say about its Claude session (status, branch, last message). */
 export interface AgentView extends Agent {
+  /** claude.ai link to its Remote Control session, once Claude has registered it. */
+  remoteUrl: string | null;
   session: {
     status: SessionStatus;
     cwd: string;
@@ -37,6 +39,7 @@ function withSession(a: Agent): AgentView {
   const s = getDb().prepare("SELECT * FROM sessions WHERE id = ?").get(a.sessionId) as SessionRow | undefined;
   return {
     ...a,
+    remoteUrl: a.status === "running" || a.status === "starting" ? remoteUrl(a.pid) : null,
     session: s
       ? {
           status: s.status as SessionStatus,

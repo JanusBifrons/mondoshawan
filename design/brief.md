@@ -17,7 +17,7 @@ Mondoshawan ("Mondo") is a Windows desktop app that monitors the Claude Code ses
 1. **Foundations.** Repo, docs, and a project registry (`mondo.config.json`). Mondo can read other repos' branches and worktrees.
 2. **Basic app and terminal monitor.** Claude Code hooks POST events to Mondo, and a live dashboard shows each session's project, worktree, branch, status, last activity and a hand-typed "System" tag.
 3. **Mobile access.** Serve the UI over the local network, with auth. *(Built: LAN gateway; phones pair by QR code and must be approved on the PC; phone layouts.)*
-4. **Open terminals remotely.** *(Built as "Agents": headless Claude Code processes Mondo spawns, chats with and stops.)*
+4. **Open terminals remotely.** *(Built as "Agents": Remote Control sessions in their own Git Bash windows, started and stopped from Mondo, chatted with in the Claude app.)*
 
 Later: prompt preparation, handoff files, knowledge base, design docs, AI features, packaging/installers.
 

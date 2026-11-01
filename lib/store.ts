@@ -199,6 +199,19 @@ export class Store extends EventEmitter {
     return s;
   }
 
+  /**
+   * Mark a session ended without a SessionEnd hook: used when Mondo force-closes an
+   * agent's window (or finds it gone), since a killed process never sends its own.
+   */
+  markEnded(id: string, why: string): boolean {
+    const s = this.get(id);
+    if (!s || s.status === "ended") return false;
+    const now = Date.now();
+    Object.assign(s, { status: "ended", statusAt: now, lastActivity: now, lastEvent: "SessionEnd", lastMessage: why });
+    this.save(s);
+    return true;
+  }
+
   remove(id: string): boolean {
     const removed = this.db.prepare("DELETE FROM sessions WHERE id = ?").run(id).changes > 0;
     if (removed) this.emit("change");

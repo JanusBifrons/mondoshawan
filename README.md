@@ -48,7 +48,7 @@ Approved phones stay signed in until you click **Revoke** next to them in Settin
 
 ## Pages
 - **Sessions:** live Claude Code sessions.
-- **Agents:** start a Claude Code agent in a project (main checkout, an existing worktree, or a new one), chat with it, interrupt, stop and resume it. Works from the phone.
+- **Agents:** start a Claude Code agent in a project from the PC or your phone. It opens in its own Git Bash window, works in its own worktree and branch, and shows up in the Claude app under Remote Control, where you chat with it. Mondo shows its status and can stop or resume it. Each project folder must be trusted by Claude once (run `claude` there and choose "Yes, I trust this folder").
 - **Knowledge base:** docs from every project in one list, searchable and filterable, with a reading pane. It draws on repo markdown, folders outside the repo, and linked Google Drive docs.
 - **Settings:** hook install status, server address, and registered projects.
 

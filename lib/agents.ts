@@ -2,9 +2,11 @@ import { execFile, spawn } from "node:child_process";
 import crypto from "node:crypto";
 import { EventEmitter } from "node:events";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { dataDir } from "./config";
 import { getDb, type DB } from "./db";
+import { getStore } from "./store";
 
 /**
  * Agents are Claude Code sessions that Mondo starts. Each one is an ordinary interactive
@@ -127,6 +129,49 @@ export function launchScript(cwd: string, args: string[]): string {
   ].join("\n");
 }
 
+/**
+ * Environment for an agent: Mondo's, minus Claude Code's own variables. If Mondo was
+ * started from inside a Claude session, those would mark the agent as a child session,
+ * which turns off transcript saving (so it couldn't be resumed).
+ */
+export function agentEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(env).filter(([k]) => !/^CLAUDE/i.test(k))) as NodeJS.ProcessEnv;
+}
+
+/**
+ * Open a Git Bash (mintty) window running `script`. Returns an error message if it
+ * couldn't start; `onLateError` reports a spawn failure that arrives afterwards.
+ */
+export function openGitBashWindow(title: string, script: string, onLateError?: (msg: string) => void): string | null {
+  const mintty = minttyPath();
+  if (!fs.existsSync(/*turbopackIgnore: true*/ mintty)) return `Git Bash not found at ${mintty}`;
+  try {
+    const child = spawn(/*turbopackIgnore: true*/ mintty, ["-t", title, "/usr/bin/bash", "-l", toBashPath(script)], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: false,
+      env: agentEnv(),
+    });
+    child.on("error", (err) => onLateError?.(`Couldn't open Git Bash: ${err.message}`));
+    child.unref();
+    return null;
+  } catch (err) {
+    return `Couldn't open Git Bash: ${(err as Error).message}`;
+  }
+}
+
+/** The claude.ai link for an agent's Remote Control session, from Claude's own session registry. */
+export function remoteUrl(pid: number | null): string | null {
+  if (!pid) return null;
+  try {
+    const file = path.join(os.homedir(), ".claude", "sessions", `${pid}.json`);
+    const id = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8")).bridgeSessionId;
+    return typeof id === "string" && /^session_[A-Za-z0-9]+$/.test(id) ? `https://claude.ai/code/${id}` : null;
+  } catch {
+    return null;
+  }
+}
+
 function isAlive(pid: number | null): boolean {
   if (!pid) return false;
   try {
@@ -218,6 +263,7 @@ export class AgentManager extends EventEmitter {
     if (!agent || !isAlive(agent.pid)) return false;
     killTree(agent.pid!);
     this.update(id, { status: "stopped", exit_info: "Stopped from Mondo" });
+    getStore().markEnded(agent.sessionId, "Stopped from Mondo");
     return true;
   }
 
@@ -236,21 +282,11 @@ export class AgentManager extends EventEmitter {
     const script = path.join(dir, `${agent.id}.sh`);
     fs.writeFileSync(/*turbopackIgnore: true*/ script, launchScript(agent.cwd, args));
 
-    const mintty = minttyPath();
-    if (!fs.existsSync(/*turbopackIgnore: true*/ mintty)) {
-      this.update(agent.id, { status: "failed", exit_info: `Git Bash not found at ${mintty}` });
-      return;
-    }
-    try {
-      const child = spawn(/*turbopackIgnore: true*/ mintty, ["-t", `${agent.project}: ${agent.name}`, "/usr/bin/bash", "-l", toBashPath(script)], {
-        detached: true,
-        stdio: "ignore",
-        windowsHide: false,
-      });
-      child.on("error", (err) => this.update(agent.id, { status: "failed", exit_info: `Couldn't open Git Bash: ${err.message}` }));
-      child.unref();
-    } catch (err) {
-      this.update(agent.id, { status: "failed", exit_info: `Couldn't open Git Bash: ${(err as Error).message}` });
+    const failed = openGitBashWindow(`${agent.project}: ${agent.name}`, script, (msg) =>
+      this.update(agent.id, { status: "failed", exit_info: msg }),
+    );
+    if (failed) {
+      this.update(agent.id, { status: "failed", exit_info: failed });
       return;
     }
 
@@ -278,6 +314,7 @@ export class AgentManager extends EventEmitter {
       if (a.status !== "starting" && a.status !== "running" && !stuck) continue;
       if (a.pid && !isAlive(a.pid)) {
         this.update(a.id, { status: stuck ? "failed" : "stopped", pid: null, exit_info: stuck ? a.exitInfo : "Window closed" });
+        getStore().markEnded(a.sessionId, "Window closed");
         continue;
       }
       if (a.status === "starting" || stuck) {

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ArrowLeft, Loader2, Play, Smartphone, Square, Trash2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, Loader2, Play, Smartphone, Square, Trash2 } from "lucide-react";
 import { AgentStatusBadge, SHOWN_LABEL, agentAction, ago, folderName, isLive, shownStatus, useAgents, useNow } from "@/components/agent-ui";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -76,9 +76,20 @@ export default function AgentView({ id }: { id: string }) {
                 <div className="flex items-center gap-2 font-semibold">
                   <Smartphone className="size-4 text-leeloo" /> Chat in the Claude app
                 </div>
+                {a.remoteUrl ? (
+                  <Button asChild className="w-full sm:w-fit">
+                    <a href={a.remoteUrl} target="_blank" rel="noreferrer">
+                      <ExternalLink /> Open in Claude
+                    </a>
+                  </Button>
+                ) : (
+                  <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="size-3.5 animate-spin" /> Waiting for it to connect…
+                  </p>
+                )}
                 <p className="text-sm text-muted-foreground">
-                  Open the Claude app, go to <b>Code</b>, and pick <b>{title}</b> (it&apos;s a Remote Control session). You
-                  can also type in its Git Bash window on the PC.
+                  It&apos;s listed as <b>{title}</b> under Remote Control in the Claude app. You can also type in its Git
+                  Bash window on the PC.
                 </p>
               </Card>
             )}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { agentInstructions, bashQuote, claudeArgs, launchScript, toBashPath, type Agent } from "@/lib/agents";
-import { folderTrust, trustKey } from "@/lib/claude-trust";
+import { folderTrusted, trustKey } from "@/lib/claude-trust";
 
 describe("Claude folder trust", () => {
   const projects = {
@@ -14,17 +14,12 @@ describe("Claude folder trust", () => {
     expect(trustKey("c:\\Users\\a\\x\\")).toBe("C:/Users/a/x");
   });
 
-  it("an exact entry decides, even against a trusted parent", () => {
-    expect(folderTrust("C:\\Users\\a\\Projects\\eqx-net\\eqx-net", projects).trusted).toBe(false);
-  });
-
-  it("otherwise the nearest parent with an entry decides", () => {
-    expect(folderTrust("C:/Users/a/Projects/eqx-net/eqx-net/.claude/worktrees/x", projects)).toEqual({
-      trusted: false,
-      decidedBy: "C:/Users/a/Projects/eqx-net/eqx-net",
-    });
-    expect(folderTrust("C:/Users/a/Projects/mondo/mondo", projects).trusted).toBe(true);
-    expect(folderTrust("C:/Elsewhere", projects)).toEqual({ trusted: false, decidedBy: null });
+  it("only an exact \"yes\" entry counts", () => {
+    expect(folderTrusted("C:\\Users\\a\\Projects\\mondo", projects)).toBe(true);
+    expect(folderTrusted("c:/Users/a/Projects/mondo/", projects)).toBe(true);
+    expect(folderTrusted("C:/Users/a/Projects/eqx-net/eqx-net", projects)).toBe(false); // explicit no; old backslash yes ignored
+    expect(folderTrusted("C:/Users/a/Projects/mondo/mondo", projects)).toBe(false); // trusted parent doesn't count
+    expect(folderTrusted("C:/Users/a/Projects/eqx-net/eqx-net/.claude/worktrees/x", projects)).toBe(false);
   });
 });
 
@@ -73,5 +68,13 @@ describe("agent launch", () => {
     const s = launchScript(agent.cwd, ["--name", "a b"]);
     expect(s).toContain("cd '/c/Users/a/eqx-net' ||");
     expect(s).toContain("exec claude '--name' 'a b'");
+  });
+});
+
+describe("agent environment", () => {
+  it("drops Claude Code's own variables so the agent isn't treated as a child session", async () => {
+    const { agentEnv } = await import("@/lib/agents");
+    const env = agentEnv({ PATH: "x", CLAUDECODE: "1", CLAUDE_CODE_CHILD_SESSION: "1", CLAUDE_PID: "9", HOME: "h" } as unknown as NodeJS.ProcessEnv);
+    expect(env).toEqual({ PATH: "x", HOME: "h" });
   });
 });
