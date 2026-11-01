@@ -291,7 +291,10 @@ function Turn({
   decide,
   retry,
   replyRef,
+  choose,
 }: {
+  /** Set on the latest reply: tap an option to answer its question. */
+  choose?: (choice: string) => void;
   /** Set on the last turn when it stopped, to ask again. */
   retry?: () => void;
   /** Set on the last turn: where to scroll when its reply arrives. */
@@ -337,6 +340,16 @@ function Turn({
             </p>
           )}
         </Card>
+      )}
+      {choose && t.choices.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {t.choices.map((c) => (
+            <Button key={c} variant="outline" disabled={busy} onClick={() => choose(c)} className="h-auto justify-start py-2 text-left whitespace-normal">
+              {c}
+            </Button>
+          ))}
+          <p className="readout normal-case">Or type your own answer below.</p>
+        </div>
       )}
       {t.proposals.map((p, i) => (
         <ProposalCard
@@ -551,6 +564,7 @@ export default function TalkView({
                     : undefined
                 }
                 replyRef={i === talk.turns.length - 1 ? lastReply : undefined}
+                choose={i === talk.turns.length - 1 && t.status === "done" && !thinking ? (c) => post({ action: "say", text: c }) : undefined}
               />
             ))}
             {settled && !thinking && (
