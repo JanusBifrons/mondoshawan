@@ -106,9 +106,24 @@ export function agentInstructions(a: Pick<Agent, "name" | "project" | "worktreeN
   return lines.join(" ");
 }
 
+/**
+ * The first message. For a new-worktree agent it always starts with the move into the
+ * worktree: the same instruction in the system prompt alone gets ignored when the user's
+ * message says e.g. "do X and nothing else" (seen in testing).
+ */
+export function firstMessage(a: Pick<Agent, "worktreeName">, prompt?: string): string {
+  const p = prompt?.trim() ?? "";
+  if (!a.worktreeName) return p;
+  const move = `First, call the EnterWorktree tool with name "${a.worktreeName}" so you work in your own worktree and branch.`;
+  return p ? `${move}
+
+Then: ${p}` : `${move} Then say you're ready and wait for instructions.`;
+}
+
 /** The claude command line for an agent (also used to resume one). */
 export function claudeArgs(a: Agent, opts: { prompt?: string; resume?: boolean }): string[] {
   const title = `${a.project}: ${a.name}`;
+  const first = opts.resume ? (opts.prompt?.trim() ?? "") : firstMessage(a, opts.prompt);
   return [
     "--remote-control", title,
     "--name", title,
@@ -116,7 +131,7 @@ export function claudeArgs(a: Agent, opts: { prompt?: string; resume?: boolean }
     "--permission-mode", a.permissionMode,
     ...(a.model ? ["--model", a.model] : []),
     "--append-system-prompt", agentInstructions(a),
-    ...(opts.prompt?.trim() ? [opts.prompt.trim()] : []),
+    ...(first ? [first] : []),
   ];
 }
 

@@ -53,9 +53,17 @@ describe("agent launch", () => {
     expect(args.slice(0, 4)).toEqual(["--remote-control", "EQX-Net: eqx-net-1104-x1y", "--name", "EQX-Net: eqx-net-1104-x1y"]);
     expect(args).toContain("--session-id");
     expect(args).toContain(agent.sessionId);
-    expect(args.at(-1)).toBe("hi");
+    expect(args.at(-1)).toBe(
+      'First, call the EnterWorktree tool with name "eqx-net-1104-x1y" so you work in your own worktree and branch.\n\nThen: hi',
+    );
     expect(agentInstructions(agent)).toMatch(/EnterWorktree tool with name "eqx-net-1104-x1y"/);
     expect(agentInstructions(agent)).toMatch(/gh pr create/);
+  });
+
+  it("a new-worktree agent's first message always starts with the move", () => {
+    expect(claudeArgs(agent, {}).at(-1)).toMatch(/^First, call the EnterWorktree tool .* Then say you're ready/);
+    expect(claudeArgs({ ...agent, worktreeName: null }, { prompt: "hi" }).at(-1)).toBe("hi");
+    expect(claudeArgs({ ...agent, worktreeName: null }, {}).at(-1)).toBe(agentInstructions({ ...agent, worktreeName: null }));
   });
 
   it("resumes by session id instead of creating one", () => {
