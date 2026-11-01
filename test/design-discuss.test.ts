@@ -292,3 +292,34 @@ describe("multiple-choice answers", () => {
     expect(parseTalkResult({ reply: "x", proposals: [], settled: false }).choices).toEqual([]);
   });
 });
+
+describe("searching what's already decided", () => {
+  it("finds the owner's words in talks, questions with answers, and Intent", async () => {
+    const { searchDesign } = await import("@/lib/design-search");
+    const { resolveQuestion } = await import("@/lib/design");
+    const db = openDb(":memory:");
+    const warp = addNode(db, { project: "Game", title: "Warp Travel" }, HUMAN);
+    const q = askQuestion(db, warp.id, { text: "Is hull-switching fast travel?" }, AGENT);
+    resolveQuestion(db, q.id, "answered", "No: parking a ship and respawning in it later is intended.", HUMAN);
+    db.prepare("INSERT INTO design_talks (id, project, node_id, session_id, title, created_at, updated_at) VALUES ('t1','Game',?,'s','x',1,1)").run(warp.id);
+    db.prepare("INSERT INTO design_talk_turns (talk_id, text, created_at, auto) VALUES ('t1', ?, 2, 0)").run(
+      "Most respawns are at a friendly NPC capital. If you've no money you're given a free ship.",
+    );
+    db.prepare("INSERT INTO design_talk_turns (talk_id, text, created_at, auto) VALUES ('t1', 'Approved \"Respawn\" (money)', 3, 1)").run();
+
+    const hits = searchDesign(db, "Game", "no money respawn");
+    expect(hits[0]).toMatchObject({ kind: "owner said", node: "Warp Travel" });
+    expect(hits[0].snippet).toContain("free ship");
+    expect(hits.some((h) => h.detail === null && h.kind === "owner said")).toBe(false); // talk id is given
+    expect(searchDesign(db, "Game", "respawning parking").map((h) => h.kind)).toContain("question");
+    expect(searchDesign(db, "Game", "xx")).toEqual([]); // too short to search
+    expect(searchDesign(db, "Other", "respawn")).toEqual([]); // other projects stay out
+  });
+
+  it("tells talk agents to search first, ask only real decisions, and keep off-topic design", () => {
+    const b = talkBrief({ project: { name: "EQX-Net", path: "C:/x" }, node: null, question: null, agentName: "talk-x", mondoPath: "C:\mondo" });
+    expect(b).toContain(`npm run -s design -- EQX-Net search '{"text":"<key words>"}' --as agent:talk-x`);
+    expect(b).toContain("Never ask about micro detail");
+    expect(b).toContain("Nothing the owner says is dropped, even if it's off the current topic");
+  });
+});
