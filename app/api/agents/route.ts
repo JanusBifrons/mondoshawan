@@ -1,6 +1,6 @@
 import { findProject, projectSlug } from "@/lib/config";
 import { MODELS, PERMISSION_MODES, getAgents, type PermissionMode } from "@/lib/agents";
-import { agentViews } from "@/lib/agent-views";
+import { agentViews, otherSessions } from "@/lib/agent-views";
 import { folderTrusted } from "@/lib/claude-trust";
 import { listWorktrees } from "@/lib/git";
 import { forbidden, isCrossSite } from "@/lib/guard";
@@ -8,8 +8,9 @@ import { normalizePath, toNativePath } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";
 
-export function GET() {
-  return Response.json({ agents: agentViews(), now: Date.now() });
+/** Mondo's agents, plus every other live Claude session on the PC. */
+export async function GET() {
+  return Response.json({ agents: agentViews(), others: await otherSessions(), now: Date.now() });
 }
 
 const WORKTREE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/;

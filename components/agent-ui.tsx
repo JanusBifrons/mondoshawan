@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { ElementGlyph, type Element } from "@/components/elements";
 import { Badge } from "@/components/ui/badge";
-import type { AgentView } from "@/lib/agent-views";
+import type { AgentView, OtherSessionView } from "@/lib/agent-views";
 import { cn } from "@/lib/utils";
 
 /** What to show for an agent: Mondo's lifecycle, refined by the hooks once it's running. */
@@ -102,20 +102,27 @@ export function useNow(skew: number) {
 /** Last path segment, for showing a folder briefly. */
 export const folderName = (p: string) => p.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? p;
 
-/** Live agent list over SSE. */
+/** Live agent list over SSE: Mondo's agents plus every other running Claude session. */
 export function useAgents() {
   const [agents, setAgents] = useState<AgentView[] | null>(null);
+  const [others, setOthers] = useState<OtherSessionView[]>([]);
   const [skew, setSkew] = useState(0);
   useEffect(() => {
     const es = new EventSource("/api/agents/stream");
     es.addEventListener("agents", (ev) => {
-      const d = JSON.parse((ev as MessageEvent).data) as { agents: AgentView[]; now: number };
+      const d = JSON.parse((ev as MessageEvent).data) as { agents: AgentView[]; others: OtherSessionView[]; now: number };
       setAgents(d.agents);
+      setOthers(d.others ?? []);
       setSkew(d.now - Date.now());
     });
     return () => es.close();
   }, []);
-  return { agents, skew };
+  return { agents, others, skew };
+}
+
+/** Hook status of a session Mondo didn't start, in the same terms as agents. */
+export function shownForSession(status: OtherSessionView["status"]): Shown {
+  return status === "ended" ? "stopped" : status;
 }
 
 export async function agentAction(id: string, body: Record<string, unknown>) {

@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, Loader2, Plus, X } from "lucide-react";
-import { AgentStatusBadge, EDGE, FIELD, ago, folderName, isLive, shownStatus, useAgents, useNow } from "@/components/agent-ui";
+import { ChevronRight, ExternalLink, Loader2, Plus, X } from "lucide-react";
+import { AgentStatusBadge, EDGE, FIELD, ago, folderName, isLive, shownForSession, shownStatus, useAgents, useNow } from "@/components/agent-ui";
 import { MondoMark } from "@/components/elements";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import type { AgentView } from "@/lib/agent-views";
+import type { AgentView, OtherSessionView } from "@/lib/agent-views";
 import { cn } from "@/lib/utils";
 
 interface Place {
@@ -22,11 +22,15 @@ interface Place {
 }
 
 export default function AgentsPage() {
-  const { agents, skew } = useAgents();
+  const { agents, others, skew } = useAgents();
   const now = useNow(skew);
   const [creating, setCreating] = useState(false);
 
-  const live = (agents ?? []).filter(isLive);
+  // Everything running on the PC, newest activity first: Mondo's agents and your own sessions.
+  const live = [
+    ...(agents ?? []).filter(isLive).map((a) => ({ kind: "agent" as const, a, at: Math.max(a.lastActivity, a.session?.lastActivity ?? 0) })),
+    ...others.map((o) => ({ kind: "other" as const, o, at: o.lastActivity })),
+  ].sort((x, y) => y.at - x.at);
   const done = (agents ?? []).filter((a) => !isLive(a));
 
   return (
@@ -42,7 +46,7 @@ export default function AgentsPage() {
       <div className="mx-auto w-full max-w-3xl space-y-4 p-4 md:p-6">
         {creating && <NewAgentForm onClose={() => setCreating(false)} />}
 
-        {agents && agents.length === 0 && !creating && (
+        {agents && agents.length === 0 && others.length === 0 && !creating && (
           <Card className="items-center gap-3 px-6 py-12 text-center">
             <MondoMark className="size-16 opacity-80" />
             <p className="display text-sm font-bold text-leeloo">No agents yet</p>
@@ -59,9 +63,13 @@ export default function AgentsPage() {
         {live.length > 0 && (
           <section className="space-y-2">
             <h2 className="readout">Running ({live.length})</h2>
-            {live.map((a) => (
-              <AgentRow key={a.id} agent={a} now={now} />
-            ))}
+            {live.map((x) =>
+              x.kind === "agent" ? (
+                <AgentRow key={x.a.id} agent={x.a} now={now} />
+              ) : (
+                <OtherRow key={x.o.sessionId} s={x.o} now={now} />
+              ),
+            )}
           </section>
         )}
 
@@ -88,6 +96,7 @@ function AgentRow({ agent: a, now }: { agent: AgentView; now: number }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate font-semibold">{a.name}</span>
             <AgentStatusBadge shown={shown} />
+            <Origin mondo />
           </div>
           <div className="readout truncate normal-case">
             {a.project} · {where} · {ago(now - Math.max(a.lastActivity, a.session?.lastActivity ?? 0))}
@@ -99,6 +108,50 @@ function AgentRow({ agent: a, now }: { agent: AgentView; now: number }) {
         <ChevronRight className="size-4 shrink-0 text-brass" />
       </Card>
     </Link>
+  );
+}
+
+/** Who started it: Mondo, or you (and from where). */
+function Origin({ mondo, from }: { mondo?: boolean; from?: string }) {
+  return (
+    <span
+      className={cn(
+        "readout rounded-sm border px-1.5 py-0.5 normal-case",
+        mondo ? "border-leeloo/50 text-leeloo" : "border-brass/40 text-brass",
+      )}
+    >
+      {mondo ? "Mondo" : `You · ${from}`}
+    </span>
+  );
+}
+
+/** A session you started yourself. Mondo only watches these; chat via Claude if it has Remote Control. */
+function OtherRow({ s, now }: { s: OtherSessionView; now: number }) {
+  const shown = shownForSession(s.status);
+  return (
+    <Card size="sm" className={cn("gap-2 px-4", EDGE[shown])}>
+      <div className="min-w-0 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="truncate font-semibold">{s.name ?? s.worktree ?? "Claude session"}</span>
+          <AgentStatusBadge shown={shown} />
+          <Origin from={s.from} />
+        </div>
+        <div className="readout truncate normal-case">
+          {s.project ?? "Unregistered folder"} · {s.worktree || folderName(s.cwd)}
+          {s.branch ? ` · ${s.branch}` : ""} · {ago(now - s.lastActivity)}
+        </div>
+        {s.lastMessage && <p className="line-clamp-1 text-xs text-muted-foreground">{s.lastMessage}</p>}
+      </div>
+      {s.remoteUrl ? (
+        <Button asChild size="sm" variant="outline" className="w-fit">
+          <a href={s.remoteUrl} target="_blank" rel="noreferrer">
+            <ExternalLink /> Open in Claude
+          </a>
+        </Button>
+      ) : (
+        <p className="text-xs text-muted-foreground">Remote Control is off for this one, so it can only be used at the PC.</p>
+      )}
+    </Card>
   );
 }
 

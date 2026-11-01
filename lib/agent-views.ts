@@ -1,5 +1,7 @@
 import { getAgents, remoteUrl, type Agent } from "./agents";
 import { getDb } from "./db";
+import { liveSessions, startedFrom } from "./live-sessions";
+import { resolveCwd } from "./resolver";
 import type { SessionStatus } from "./status";
 
 /** An agent plus what the hooks say about its Claude session (status, branch, last message). */
@@ -51,4 +53,53 @@ function withSession(a: Agent): AgentView {
         }
       : null,
   };
+}
+
+/** A running Claude session that Mondo didn't start (your terminals, the desktop app, …). */
+export interface OtherSessionView {
+  sessionId: string;
+  pid: number;
+  name: string | null;
+  /** "terminal", "desktop app", "script", … */
+  from: string;
+  project: string | null;
+  cwd: string;
+  worktree: string;
+  branch: string | null;
+  status: SessionStatus;
+  lastMessage: string | null;
+  lastActivity: number;
+  remoteUrl: string | null;
+}
+
+interface FullSessionRow extends SessionRow {
+  project: string | null;
+}
+
+/** Every live Claude session on this PC that isn't one of Mondo's agents. */
+export async function otherSessions(): Promise<OtherSessionView[]> {
+  const mine = new Set(getAgents().list().map((a) => a.sessionId));
+  const db = getDb();
+  const out: OtherSessionView[] = [];
+  for (const s of liveSessions()) {
+    if (mine.has(s.sessionId)) continue;
+    const row = db.prepare("SELECT * FROM sessions WHERE id = ?").get(s.sessionId) as FullSessionRow | undefined;
+    const match = row ? null : await resolveCwd(s.cwd);
+    out.push({
+      sessionId: s.sessionId,
+      pid: s.pid,
+      name: s.name,
+      from: startedFrom(s.entrypoint),
+      project: row?.project ?? match?.project ?? null,
+      cwd: s.cwd,
+      worktree: row?.worktree ?? match?.worktree ?? "",
+      branch: row?.branch ?? null,
+      // The hooks know about permission prompts and turns; Claude's own state is the fallback.
+      status: (row?.status as SessionStatus) ?? (s.state === "busy" ? "working" : "idle"),
+      lastMessage: row?.last_message ?? null,
+      lastActivity: row?.last_activity ?? s.startedAt ?? 0,
+      remoteUrl: s.remoteUrl,
+    });
+  }
+  return out.sort((a, b) => b.lastActivity - a.lastActivity);
 }
