@@ -127,7 +127,9 @@ Mondo **is** the design bible: a living tree (and web) of design nodes per proje
     - Each project page has a chase list, plus "Overdue chases", "High priority" and "Stale ideas" chips in its "needs you" strip. Stale means idea or proposed, untouched for 30 days, with no open chase.
 - **Adding to design tables:** new tables go in `DESIGN_SCHEMA` (`CREATE … IF NOT EXISTS`); new columns go in `DESIGN_COLUMNS` (added if missing on open). Neither takes a numbered migration, so they can't clash with other branches.
 - **Seeding:** the `design-survey` skill (`.claude/skills/design-survey/SKILL.md`) has a Claude session survey one system at a time from the code.
-- **Later:** harden, impact and verify jobs run through Mondo's agent spawner; "Produce design document" exports.
+- **Code changed since checked** (`lib/design-freshness.ts`, `GET /api/design/<project>/changes`): for each Built node, Mondo diffs the files its Reality cites as evidence between the commit it was written at and the game's merged code (`origin/main`, fetched read-only at most every 10 minutes; the project folder's checked-out branch is ignored). Changed nodes are marked on their Reality tab and listed on the project page.
+- **Regenerate** (`lib/design-regenerate.ts`, `POST /api/design/<project>/regenerate`): one fixed instruction to re-check nodes against the merged code and rewrite their Reality in the standard style. A button on every built node's Reality tab, plus "Update all" for changed nodes (one agent, up to 40). It never runs on its own (the owner's choice).
+- **Later:** harden and impact jobs; "Produce design document" exports.
 
 ## Launching
 - **Shortcuts:** `npm run shortcut` creates Desktop and Start menu shortcuts that run `node_modules/electron/dist/electron.exe "<repo>"`, so no terminal is needed. Flags: `-Startup`, `-Remove`.
@@ -153,4 +155,4 @@ Mondo **is** the design bible: a living tree (and web) of design nodes per proje
 - **A stale `.next/dev/types` breaks `next build`** after a route is deleted (it still references the old route). It's generated, so delete it.
 - **Git Bash quoting:** heredocs and `node -e` scripts containing apostrophes break, and `\\d` inside a `node -e` template string loses its backslashes. Write scripts to a file with the editor instead.
 - **Phone screenshots:** emulate a 390px phone through Edge's DevTools protocol, or use eqx-net's Playwright (`require("C:/Users/alecv/Documents/Projects/eqx-net/eqx-net/node_modules/playwright")`). Headless Edge's `--window-size` can't go below ~500px wide.
-- **Design-tree freshness:** EQX-Net reality was surveyed at eqx-net `d36931c`, and Mondo › Agents at `c22905e`. Both drift as code changes; there's no verify job yet.
+- **Design-tree freshness:** shown per node ("code changed since checked"); fix it with Regenerate. Agents writing Reality must read `origin/main`, because the project folder may be on an old branch (EQX-Net's main folder sat on `docs/auto-merge-pr-ritual` at `d36931c`).

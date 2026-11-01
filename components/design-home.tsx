@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, CircleHelp, Loader2, MessagesSquare } from "lucide-react";
+import { ChevronDown, ChevronRight, CircleHelp, Loader2, MessagesSquare, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { QuestionListItem, TreeNode } from "@/lib/design";
@@ -256,5 +256,115 @@ export function SectionTitle({ children }: { children: React.ReactNode }) {
     <h2 className="readout flex items-center gap-2">
       <CircleHelp className="size-3.5" /> {children}
     </h2>
+  );
+}
+
+/** Starts a regeneration (fixed instruction) for one or more nodes, then shows the agent. */
+export function RegenerateButton({
+  slug,
+  nodes,
+  label = "Regenerate",
+  primary = false,
+  confirmText,
+}: {
+  slug: string;
+  nodes: string[];
+  label?: string;
+  primary?: boolean;
+  confirmText?: string;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const go = async () => {
+    if (confirmText && !confirm(confirmText)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await fetch(`/api/design/${slug}/regenerate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nodes }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      router.push(`/agents/${encodeURIComponent(d.sessionId)}`);
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <span className="inline-flex flex-col gap-1">
+      <Button size="sm" variant={primary ? "default" : "outline"} disabled={busy || !nodes.length} onClick={go}>
+        {busy ? <Loader2 className="animate-spin" /> : <RefreshCw />} {label}
+      </Button>
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </span>
+  );
+}
+
+export interface CodeChangeItem {
+  nodeId: string;
+  title: string;
+  since: string;
+  files: string[];
+}
+
+/** Nodes whose code changed since they were checked, with "Update all" (one agent for all of them). */
+export function ChangedSection({
+  slug,
+  changes,
+  against,
+  onOpen,
+}: {
+  slug: string;
+  changes: CodeChangeItem[];
+  against: string | null;
+  onOpen: (nodeId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!changes.length) return null;
+  const batch = changes.slice(0, 40);
+  return (
+    <section className="space-y-2 rounded-lg border border-taxi/40 bg-taxi/5 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className="readout flex items-center gap-1 text-taxi hover:text-leeloo" onClick={() => setOpen((v) => !v)}>
+          <ChevronDown className={cn("size-3.5 transition-transform", !open && "-rotate-90")} />
+          Code changed since checked ({changes.length})
+        </button>
+        <span className="ml-auto">
+          <RegenerateButton
+            slug={slug}
+            nodes={batch.map((c) => c.nodeId)}
+            label={`Update ${batch.length === changes.length ? "all" : batch.length}`}
+            primary
+            confirmText={`Start an agent to re-check and rewrite ${batch.length} node${batch.length === 1 ? "" : "s"} against the merged code? It runs on its own; you can watch it on the Agents page.`}
+          />
+        </span>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        The code these descriptions cite has changed in the merged game{against ? ` (${against})` : ""} since they were
+        written.
+      </p>
+      {open && (
+        <div className="space-y-1.5">
+          {changes.map((c) => (
+            <button
+              key={c.nodeId}
+              type="button"
+              onClick={() => onOpen(c.nodeId)}
+              className="flex w-full items-center gap-2 rounded-md border bg-card/60 px-3 py-2 text-left text-sm hover:border-leeloo"
+            >
+              <span className="min-w-0 flex-1 truncate">{c.title}</span>
+              <span className="readout shrink-0 normal-case">
+                {c.files.length} file{c.files.length === 1 ? "" : "s"} · since {c.since}
+              </span>
+              <ChevronRight className="size-4 shrink-0 text-brass" />
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
