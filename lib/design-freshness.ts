@@ -118,3 +118,8 @@ export async function codeChanges(db: DB, project: ProjectConfig): Promise<Fresh
   cache.set(project.name, { key, value });
   return value;
 }
+
+/** The last computed result for a project, without waiting (null until codeChanges has run once). */
+export function cachedChanges(project: ProjectConfig): Freshness | null {
+  return (cache.get(project.name)?.value as Freshness | undefined) ?? null;
+}

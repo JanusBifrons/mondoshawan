@@ -1,7 +1,8 @@
 import { findProject, projectSlug } from "@/lib/config";
 import { getDb } from "@/lib/db";
 import { DesignError } from "@/lib/design";
-import { decide, getTalk, say, stopTalk } from "@/lib/design-talk";
+import { decide, getTalk, say, stopTalk, verifyTalk } from "@/lib/design-talk";
+import { codeChanges } from "@/lib/design-freshness";
 import { forbidden, isCrossSite } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 }
 
 /**
- * { action: "say", text } | { action: "decide", jobId, index, decision: "approve" | "idea" | "revise" | "skip", note? } | { action: "stop" }.
+ * { action: "say", text } | { action: "decide", jobId, index, decision: "approve" | "idea" | "revise" | "skip", note? } | { action: "verify" } (check against the code) | { action: "stop" }.
  * Approve saves it as the owner, signs its Intent and moves the node to approved; idea saves it and keeps
  * it an idea; revise sends the owner's tweak (note) back to the agent. Each starts the agent's next turn.
  */
@@ -42,7 +43,11 @@ export async function POST(req: Request, { params }: Ctx) {
     const db = getDb();
     const project = findProject(projectSlug(getTalk(db, id).project));
     if (!project) return Response.json({ error: "this talk's project is no longer set up" }, { status: 404 });
+    // Refresh which nodes are stale (cached; fetches at most every 10 minutes), so the agent's brief is current.
+    if (b.action !== "stop") await codeChanges(db, project).catch(() => null);
     switch (b.action) {
+      case "verify":
+        return Response.json({ talk: verifyTalk(db, project, id) });
       case "say":
         return Response.json({ talk: say(db, project, id, typeof b.text === "string" ? b.text : "") });
       case "decide":

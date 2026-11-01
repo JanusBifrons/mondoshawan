@@ -218,3 +218,39 @@ describe("one card at a time, locked in as a draft or approved", () => {
     expect(row(mines.id).signed_at).toBeNull();
   });
 });
+
+describe("checking against the truth", () => {
+  it("spots the owner saying something already exists", async () => {
+    const { soundsAlreadyDone } = await import("@/lib/design-talk");
+    for (const t of ["Wait, we've done that already", "that's built", "We have designed this", "this is out of date", "isn't that in the game already?"]) {
+      expect(soundsAlreadyDone(t), t).toBe(true);
+    }
+    for (const t of ["Option 1.", "I'd like ships to have names", "Make it 24 characters", "it is in the menu"]) {
+      expect(soundsAlreadyDone(t), t).toBe(false);
+    }
+  });
+
+  it("tells the agent the code is the truth, which nodes are stale, and how to verify", () => {
+    const project = { name: "EQX-Net", path: "C:/Users/a/eqx-net/eqx-net" };
+    const b = talkBrief({ project, node: null, question: null, agentName: "talk-x", mondoPath: "C:\mondo", stale: { against: "origin/main @ abc1234", titles: ["Regions", "Galaxy Map"] } });
+    expect(b).toContain("the merged code and its history are the truth");
+    expect(b).toContain("Regions, Galaxy Map");
+    expect(b).toContain("origin/main @ abc1234");
+    expect(b).toContain("When the owner says something already exists");
+    expect(b).toContain("gh pr list --state merged");
+    expect(b).toContain(`"regenerate"`);
+  });
+
+  it("refuses a re-check of a node that doesn't exist, before writing anything", () => {
+    const db = openDb(":memory:");
+    const project = { name: "Game", path: "/x" };
+    const n = addNode(db, { project: "Game", title: "Regions" }, HUMAN);
+    expect(() =>
+      applyProposal(db, project, { node_id: n.id }, [
+        { action: "write_intent", args: { text: "x" } },
+        { action: "regenerate", args: { nodes: ["Nope"] } },
+      ]),
+    ).toThrow(/no such node to re-check/);
+    expect(db.prepare("SELECT COUNT(*) n FROM design_revisions").get()).toEqual({ n: 0 });
+  });
+});

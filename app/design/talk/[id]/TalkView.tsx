@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowLeft, Check, Lightbulb, Loader2, MessagesSquare, PenLine, Send, Square, X } from "lucide-react";
+import { ArrowLeft, Check, Lightbulb, Loader2, MessagesSquare, PenLine, SearchCheck, Send, Square, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { fmtDuration, fmtTokens } from "@/components/usage-ui";
 import { Button } from "@/components/ui/button";
@@ -98,6 +98,12 @@ function ActionView({ a, tree, slug }: { a: TalkAction; tree: LinkableNode[]; sl
     case "source":
       head = `Link on ${nodeName(s("node"))}: ${s("title") || s("ref")}`;
       break;
+    case "regenerate": {
+      const nodes = Array.isArray(a.args.nodes) ? (a.args.nodes as unknown[]).map(String) : s("node") ? [s("node")] : [];
+      head = `Re-check against the code: ${nodes.map(nodeName).join(", ")}`;
+      content = <p className="text-sm text-muted-foreground">Runs a background job that rewrites their Reality from the merged code.</p>;
+      break;
+    }
     default:
       head = a.action;
   }
@@ -410,6 +416,17 @@ export default function TalkView({ id }: { id: string }) {
             <Button type="submit" disabled={busy || thinking || !text.trim()} aria-label="Send">
               {busy ? <Loader2 className="animate-spin" /> : <Send />}
             </Button>
+          </div>
+          <div className="mx-auto mt-1.5 flex max-w-3xl">
+            <button
+              type="button"
+              disabled={busy || thinking}
+              onClick={() => post({ action: "verify" })}
+              className="readout flex items-center gap-1 normal-case hover:text-leeloo disabled:opacity-50"
+              title="Make the agent stop and check what you're discussing against the merged code, git history and merged PRs"
+            >
+              <SearchCheck className="size-3.5" /> Check against the code
+            </button>
           </div>
           {error && <p className="mx-auto mt-1 max-w-3xl text-xs text-destructive">{error}</p>}
         </form>
