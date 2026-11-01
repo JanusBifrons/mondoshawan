@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, ExternalLink, Loader2, Plus, X } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronRight, ExternalLink, Loader2, Plus, X } from "lucide-react";
+import { Confidence, fmtDuration, fmtTokens } from "@/components/usage-ui";
+import type { UsageRun } from "@/lib/usage";
 import {
   AgentStatusBadge,
   EDGE,
@@ -37,8 +39,26 @@ const isNeedsYou = (i: FleetItem) => i.live && (i.shown === "waiting" || i.shown
  * Mondo's home: every Claude session on the PC (Mondo's agents and yours), with what
  * needs you first. Tap one for its details and actions.
  */
+/** Background jobs (polled; they change slowly). */
+function useJobs() {
+  const [jobs, setJobs] = useState<UsageRun[]>([]);
+  useEffect(() => {
+    const load = () =>
+      fetch("/api/jobs", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d: { jobs: UsageRun[] }) => setJobs(d.jobs))
+        .catch(() => {});
+    load();
+    const t = setInterval(load, 4000);
+    return () => clearInterval(t);
+  }, []);
+  return jobs;
+}
+
 export default function AgentsPage() {
   const { items, skew } = useFleet();
+  const jobs = useJobs();
+  const [showAllJobs, setShowAllJobs] = useState(false);
   const now = useNow(skew);
   const [creating, setCreating] = useState(false);
   const [showEnded, setShowEnded] = useState(false);
@@ -61,6 +81,12 @@ export default function AgentsPage() {
             {needs.length} need{needs.length === 1 ? "s" : ""} you
           </span>
         )}
+        <Button asChild size="sm" variant="ghost" aria-label="Usage">
+          <Link href="/agents/usage">
+            <BarChart3 />
+            <span className="hidden sm:inline">Usage</span>
+          </Link>
+        </Button>
         {!creating && (
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus /> New
@@ -105,6 +131,23 @@ export default function AgentsPage() {
           </section>
         )}
 
+        {jobs.length > 0 && (
+          <section className="space-y-2">
+            <h2 className="readout flex items-center gap-2">
+              Background jobs
+              {jobs.some((j) => j.status === "running") && <Loader2 className="size-3.5 animate-spin text-fire" />}
+            </h2>
+            {(showAllJobs ? jobs : jobs.filter((j, n) => j.status === "running" || n < 3)).map((j) => (
+              <JobRow key={j.id} job={j} />
+            ))}
+            {jobs.length > 3 && (
+              <button type="button" className="readout hover:text-leeloo" onClick={() => setShowAllJobs((v) => !v)}>
+                {showAllJobs ? "Show fewer" : `Show all ${jobs.length}`}
+              </button>
+            )}
+          </section>
+        )}
+
         {ended.length > 0 && (
           <section className="space-y-2">
             <button
@@ -126,6 +169,36 @@ export default function AgentsPage() {
         )}
       </div>
     </>
+  );
+}
+
+/** A background job: no window, no chat; tap for its result and usage. */
+function JobRow({ job: j }: { job: UsageRun }) {
+  const running = j.status === "running";
+  return (
+    <Link href={j.href} className="block">
+      <Card size="sm" className={cn("flex-row items-center gap-3 px-4 transition-colors hover:bg-accent/40", running ? EDGE.working : j.status === "failed" ? EDGE.failed : EDGE.stopped)}>
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="truncate font-semibold">{j.title}</span>
+            <span className="readout rounded-sm border border-brass/40 px-1.5 normal-case">job</span>
+            {running && <Loader2 className="size-3.5 animate-spin text-fire" />}
+            {j.status === "failed" && <span className="text-xs text-taxi">failed</span>}
+            {j.status === "stopped" && <span className="text-xs text-muted-foreground">stopped</span>}
+          </div>
+          <div className="readout flex flex-wrap gap-x-3 normal-case">
+            <span>{running ? "running" : "took"} {fmtDuration(j.durationMs)}</span>
+            {!running && <span>{fmtTokens(j.tokens.total)} tokens</span>}
+            {j.confidence !== null && (
+              <span>
+                confidence <Confidence value={j.confidence} />
+              </span>
+            )}
+          </div>
+        </div>
+        <ChevronRight className="size-4 shrink-0 text-brass" />
+      </Card>
+    </Link>
   );
 }
 

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { getAgents, remoteUrl, type Agent } from "./agents";
+import { getJobs } from "./jobs";
 import { liveSessions, startedFrom, type LiveSession } from "./live-sessions";
 import { resolveCwd } from "./resolver";
 import type { SessionStatus } from "./status";
@@ -67,7 +68,8 @@ export async function fleet(now = Date.now()): Promise<FleetItem[]> {
   const rows = new Map(getStore().list().map((s) => [s.id, s]));
   const live = new Map<string, LiveSession>(liveSessions().map((l) => [l.sessionId, l]));
   const items: FleetItem[] = [];
-  const seen = new Set<string>();
+  // Background jobs have their own list; don't show their sessions here too.
+  const seen = getJobs().sessionIds();
 
   for (const a of getAgents().list()) {
     const row = rows.get(a.sessionId);

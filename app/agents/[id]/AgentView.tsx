@@ -17,11 +17,14 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { ActivityLine } from "@/lib/fleet";
+import type { Tokens } from "@/lib/usage";
+import { TOKENS_HELP, TokenGrid, modelName } from "@/components/usage-ui";
 import { cn } from "@/lib/utils";
 
 interface Detail {
   item: FleetItem;
   activity: ActivityLine[];
+  usage: { tokens: Tokens; models: string[]; calls: number } | null;
   now: number;
 }
 
@@ -206,6 +209,19 @@ export default function AgentView({ id }: { id: string }) {
                 </Button>
               )}
             </div>
+
+            {d.usage && d.usage.calls > 0 && (
+              <Card className="gap-2 px-4 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="readout">Usage so far</h2>
+                  <span className="readout normal-case">
+                    {d.usage.models.map(modelName).join(", ")} · {d.usage.calls} repl{d.usage.calls === 1 ? "y" : "ies"}
+                  </span>
+                </div>
+                <TokenGrid t={d.usage.tokens} />
+                <p className="text-xs text-muted-foreground">{TOKENS_HELP}</p>
+              </Card>
+            )}
 
             <section className="space-y-2">
               <h2 className="readout">Recent activity</h2>

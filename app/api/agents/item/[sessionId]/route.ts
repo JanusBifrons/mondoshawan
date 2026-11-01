@@ -3,6 +3,7 @@ import { fleetItem, recentActivity, transcriptFile } from "@/lib/fleet";
 import { forbidden, isCrossSite } from "@/lib/guard";
 import { liveSessions } from "@/lib/live-sessions";
 import { getStore } from "@/lib/store";
+import { sessionUsage, sumModels } from "@/lib/usage";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,9 @@ export async function GET(_req: Request, { params }: Ctx) {
   const { sessionId } = await params;
   const item = await fleetItem(sessionId);
   if (!item) return Response.json({ error: "not found" }, { status: 404 });
-  return Response.json({ item, activity: recentActivity(transcriptFile(item)), now: Date.now() });
+  const u = sessionUsage(item.sessionId, item.cwd, item.transcriptPath);
+  const usage = u ? { tokens: sumModels(u.models), models: u.models.map((m) => m.model), calls: u.calls } : null;
+  return Response.json({ item, activity: recentActivity(transcriptFile(item)), usage, now: Date.now() });
 }
 
 /**

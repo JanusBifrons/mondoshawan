@@ -21,8 +21,8 @@ export async function POST(req: Request, { params }: Ctx) {
   }
   const nodes = Array.isArray(b.nodes) ? b.nodes.filter((n): n is string => typeof n === "string" && !!n.trim()) : [];
   try {
-    const agent = startRegenerate(getDb(), project, nodes);
-    return Response.json({ sessionId: agent.sessionId, name: agent.name }, { status: 201 });
+    const job = startRegenerate(getDb(), project, nodes);
+    return Response.json({ jobId: job.id, title: job.title }, { status: 201 });
   } catch (err) {
     if (err instanceof DesignError) return Response.json({ error: err.message }, { status: err.status });
     throw err;

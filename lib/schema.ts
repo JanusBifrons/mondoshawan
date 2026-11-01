@@ -99,6 +99,41 @@ export const MIGRATIONS: readonly string[] = [
   `
   ALTER TABLE agents ADD COLUMN pid INTEGER;
   `,
+  // 5: jobs: invisible, scoped background agents (e.g. Regenerate), with full usage for auditing.
+  `
+  CREATE TABLE jobs (
+    id                 TEXT PRIMARY KEY,
+    kind               TEXT NOT NULL,
+    project            TEXT,
+    title              TEXT NOT NULL,
+    input              TEXT NOT NULL DEFAULT '{}',
+    model              TEXT,
+    effort             TEXT,
+    status             TEXT NOT NULL,
+    pid                INTEGER,
+    session_id         TEXT NOT NULL,
+    created_at         INTEGER NOT NULL,
+    started_at         INTEGER,
+    finished_at        INTEGER,
+    duration_ms        INTEGER,
+    api_ms             INTEGER,
+    turns              INTEGER,
+    tool_calls         INTEGER NOT NULL DEFAULT 0,
+    cost_usd           REAL,
+    input_tokens       INTEGER,
+    output_tokens      INTEGER,
+    thinking_tokens    INTEGER,
+    cache_read_tokens  INTEGER,
+    cache_write_tokens INTEGER,
+    model_usage        TEXT,
+    progress           TEXT,
+    summary            TEXT,
+    confidence         REAL,
+    result             TEXT,
+    error              TEXT
+  );
+  CREATE INDEX jobs_created ON jobs(created_at);
+  `,
 ];
 
 /**
