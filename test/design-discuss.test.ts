@@ -332,7 +332,10 @@ describe("checking the open questions", () => {
     expect(b).toContain("Question 32 (on \"Hulls\")");
     expect(b).toContain("Already answered");
     expect(b).toContain("Micro detail");
-    expect(b).toContain("When unsure, keep it.");
+    expect(b).toContain("When genuinely unsure, keep it");
+    expect(b).toContain("Out of date");
+    expect(b).toContain("A bug, not a design decision");
+    expect(b).toContain("one by one");
     expect(b).toContain("npm run -s design -- EQX-Net search");
     expect(triageDrops({ drop: [{ question: 32, reason: "micro", answer: "later" }, { question: "x" }, null, { question: "7", reason: "dup" }] })).toEqual([
       { question: 32, reason: "micro", answer: "later" },
