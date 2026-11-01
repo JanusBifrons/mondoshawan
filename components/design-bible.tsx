@@ -54,7 +54,15 @@ import {
   type Stage,
 } from "@/lib/design-meta";
 import type { ChaseListItem, DesignEvent, NodeDetail, QuestionListItem, Revision, TreeNode } from "@/lib/design";
-import { Collapsed, QuestionCards, SectionTitle, StartDiscussion } from "@/components/design-home";
+import {
+  ChangedSection,
+  Collapsed,
+  QuestionCards,
+  RegenerateButton,
+  SectionTitle,
+  StartDiscussion,
+  type CodeChangeItem,
+} from "@/components/design-home";
 import { findNodeRef, wikiLinks } from "@/lib/design-links";
 
 // ---------- look ----------
@@ -108,6 +116,64 @@ const who = (actor: string) => (actor === "human" ? "You" : actor.replace(/^agen
  * A link opens that node; one to a node that doesn't exist yet shows dotted.
  */
 const NodeLinks = createContext<{ tree: TreeNode[]; onSelect: (id: string) => void } | null>(null);
+
+/** Built nodes whose cited code changed since they were checked (from /api/design/<project>/changes). */
+const CodeChanges = createContext<Map<string, CodeChangeItem>>(new Map());
+
+/** Loads "code changed since checked" for a project; re-checks when the design changes. */
+function useCodeChanges(slug: string, lastEvent: number) {
+  const [state, setState] = useState<{ changed: CodeChangeItem[]; against: string | null }>({ changed: [], against: null });
+  useEffect(() => {
+    let live = true;
+    const t = setTimeout(() => {
+      fetch(`/api/design/${slug}/changes`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d: { changed?: CodeChangeItem[]; against?: string | null }) => {
+          if (live) setState({ changed: d.changed ?? [], against: d.against ?? null });
+        })
+        .catch(() => {});
+    }, 800);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [slug, lastEvent]);
+  return state;
+}
+
+/** On a built node's Reality tab: whether its code changed, and the Regenerate button. */
+function RegenerateBox({ slug, nodeId }: { slug: string; nodeId: string }) {
+  const change = useContext(CodeChanges).get(nodeId);
+  if (!change) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <RegenerateButton slug={slug} nodes={[nodeId]} label="Regenerate" />
+        <span>Re-checks it against the merged code and rewrites it in the standard style.</span>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2 rounded-lg border border-taxi/40 bg-taxi/5 p-3 text-sm">
+      <p>
+        <span className="font-semibold text-taxi">The code behind this has changed</span> since it was checked (at{" "}
+        <span className="font-mono">{change.since}</span>), so parts of it may be out of date.
+      </p>
+      <details className="text-xs text-muted-foreground">
+        <summary className="cursor-pointer">
+          {change.files.length} changed file{change.files.length === 1 ? "" : "s"}
+        </summary>
+        <ul className="mt-1 space-y-0.5 font-mono">
+          {change.files.map((f) => (
+            <li key={f} className="break-all">
+              {f}
+            </li>
+          ))}
+        </ul>
+      </details>
+      <RegenerateButton slug={slug} nodes={[nodeId]} label="Regenerate now" primary />
+    </div>
+  );
+}
 
 function NodeLink({ href, children }: { href: string; children: React.ReactNode }) {
   const ctx = useContext(NodeLinks);
@@ -761,6 +827,7 @@ function NodePanel({
 
       <div className="space-y-4 p-4">
         {tab === "intent" && <IntentTab slug={slug} detail={detail} onDone={refresh} />}
+        {tab === "reality" && detail.reality && <RegenerateBox slug={slug} nodeId={node.id} />}
         {tab === "reality" && <RealityTab slug={slug} detail={detail} onDone={refresh} />}
         {tab === "reviews" && <ReviewsTab slug={slug} detail={detail} onDone={refresh} />}
         {tab === "questions" && <QuestionsTab slug={slug} detail={detail} tree={tree} onDone={refresh} onSelect={onSelect} />}
@@ -1356,6 +1423,8 @@ function HistoryTab({ detail }: { detail: NodeDetail }) {
 
 export function DesignBible({ slug }: { slug: string }) {
   const { data, error, reload, lastEvent } = useDesign(slug);
+  const changes = useCodeChanges(slug, lastEvent);
+  const changeMap = useMemo(() => new Map(changes.changed.map((c) => [c.nodeId, c])), [changes.changed]);
   const wide = useMinWidth(1024);
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState<"tree" | "flow">("tree");
@@ -1388,6 +1457,7 @@ export function DesignBible({ slug }: { slug: string }) {
   const filtered = gapDef ? tree.filter((n) => n.stage !== "retired" && gapDef.test(n)) : null;
 
   const panel = selected && (
+    <CodeChanges.Provider value={changeMap}>
     <NodeLinks.Provider value={{ tree, onSelect: (nid: string) => (setStartTab(undefined), select(nid)) }}>
     <NodePanel
       key={`${selected}:${startTab ?? ""}`}
@@ -1400,6 +1470,7 @@ export function DesignBible({ slug }: { slug: string }) {
       initialTab={startTab}
     />
     </NodeLinks.Provider>
+    </CodeChanges.Provider>
   );
 
   return (
@@ -1413,6 +1484,12 @@ export function DesignBible({ slug }: { slug: string }) {
           </SectionTitle>
           <QuestionCards items={data.questions} slugs={{ [data.project]: slug }} onOpen={(nid) => (setStartTab("questions"), select(nid))} />
         </section>
+        <ChangedSection
+          slug={slug}
+          changes={changes.changed}
+          against={changes.against}
+          onOpen={(nid) => (setStartTab("reality"), select(nid))}
+        />
         <h2 className="readout pt-2">Explore the design</h2>
 
         <div className="flex flex-wrap items-center gap-2">

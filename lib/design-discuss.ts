@@ -18,6 +18,16 @@ export function mondoFolder(): string {
   return toNativePath(mondo?.path ?? rootDir());
 }
 
+/** How agents read the game's merged code, whatever branch the folder has checked out. Pure. */
+export function mergedCodeRule(project: ProjectConfig): string {
+  const p = toNativePath(project.path);
+  return [
+    `The game as merged is \`origin/main\` in ${p}. That folder may have another branch checked out, so don't read its working files:`,
+    `run \`git -C "${p}" fetch origin\`, list files with \`git -C "${p}" ls-tree -r --name-only origin/main\`, read one with \`git -C "${p}" show origin/main:<path>\`,`,
+    `and record the commit as \`git -C "${p}" rev-parse --short origin/main\`.`,
+  ].join(" ");
+}
+
 const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30) || "node";
 
 /** The agent's brief: what it's discussing, how to read it, and the rules. Pure, for tests. */
@@ -38,7 +48,7 @@ export function discussBrief(opts: {
       ? `The node: "${node.path}" (id ${node.id}) in the ${project.name} design bible. Read it first, from ${mondoPath}: \`${cli(`get '{"node":"${node.id}"}'`)}\`.`
       : `Start by reading the tree, from ${mondoPath}: \`${cli("tree")}\`, then find where their idea fits. A new idea becomes a new node under the right parent, at stage "idea".`,
     `Also useful: \`${cli("tree")}\`, \`${cli("gaps")}\` and \`npm run -s design -- help\`.`,
-    `${project.name}'s code is at ${toNativePath(project.path)}. Read it when it helps, but don't change any code: this is a design conversation.`,
+    `${project.name}'s code is at ${toNativePath(project.path)}. Read it when it helps, but don't change any code: this is a design conversation. ${mergedCodeRule(project)}`,
     `Follow the design bible's rules in ${mondoPath}\\CLAUDE.md ("Design bible"). You can add idea nodes, raise questions, write draft intent, and add chases and links. You can't sign intent or move nodes into canon; only the owner does that.`,
     `Ask the owner questions one at a time, each with options and your recommendation.`,
     `Anything you write to the bible must be plain English that needs zero context, and must link other nodes it mentions with [[Title]] or [[Parent/Title|label]].`,
@@ -51,7 +61,13 @@ const OPENER_NODE =
 const OPENER_PROJECT = "Give me a short overview of the design as it stands, and ask what I'd like to explore.";
 
 /** Start a design conversation about a node (`nodeRef`), or about the project as a whole (null). */
-export function startDiscussion(db: DB, project: ProjectConfig, nodeRef: string | null, message: string): Agent {
+export function startDiscussion(
+  db: DB,
+  project: ProjectConfig,
+  nodeRef: string | null,
+  message: string,
+  opts: { name?: string; linkTitle?: string } = {},
+): Agent {
   let node: { id: string; path: string; title: string } | null = null;
   if (nodeRef) {
     const row = resolveNode(db, project.name, nodeRef);
@@ -65,7 +81,7 @@ export function startDiscussion(db: DB, project: ProjectConfig, nodeRef: string 
     throw new DesignError(`Claude hasn't been told to trust ${cwd} yet. At the PC, use Settings → Folder trust, then try again.`, 409);
   }
 
-  const name = `design-${slugify(node?.title ?? "explore")}`;
+  const name = opts.name ? slugify(opts.name).replace(/^-+/, "") || "agent" : `design-${slugify(node?.title ?? "explore")}`;
   const text = message.trim().slice(0, 20_000);
   const agent = getAgents().spawn({
     name,
@@ -80,8 +96,8 @@ export function startDiscussion(db: DB, project: ProjectConfig, nodeRef: string 
 
   if (node) {
     const when = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-    const about = text ? `: ${text.split("\n")[0].slice(0, 80)}` : "";
-    addSource(db, node.id, { ref: `/agents/${agent.sessionId}`, title: `Conversation with an agent, ${when}${about}` }, HUMAN);
+    const about = text && !opts.linkTitle ? `: ${text.split("\n")[0].slice(0, 80)}` : "";
+    addSource(db, node.id, { ref: `/agents/${agent.sessionId}`, title: `${opts.linkTitle ?? "Conversation with an agent"}, ${when}${about}` }, HUMAN);
   }
   return agent;
 }

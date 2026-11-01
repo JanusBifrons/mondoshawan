@@ -34,9 +34,10 @@ Survey **one system at a time** (e.g. "Weapons"), as asked. Don't survey the who
    - Never touch nodes in other stages, except to write reality on them.
 
 2. **Read the code, not the docs.** Find the project path in `mondo.config.json`.
+   - **Read the merged code (`origin/main`), not the folder's working files.** The project folder may have another branch checked out. Run `git -C <path> fetch origin`, list files with `git -C <path> ls-tree -r --name-only origin/main`, read them with `git -C <path> show origin/main:<file>`, and use `git -C <path> rev-parse --short origin/main` as the commit.
    - Docs, plans and handoffs describe intent and are often stale. Use them only to know where to look.
    - Trace the real behaviour: server simulation, client feedback, config values and constants.
-   - Get the commit you're describing: `git -C <project path> rev-parse --short HEAD`.
+   - Get the commit you're describing: `git -C <project path> rev-parse --short origin/main`.
 
 3. **Shape the tree.** Use `System › mechanic › detail`, about 2–4 levels deep. One node per thing a designer would talk about, like "Missiles" or "Missile homing", not one per file.
    ```bash
