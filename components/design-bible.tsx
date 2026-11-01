@@ -61,6 +61,7 @@ import {
   Collapsed,
   QuestionCards,
   RapidFireLink,
+  CheckQuestionsButton,
   RegenerateButton,
   SectionTitle,
   StartDiscussion,
@@ -1520,7 +1521,10 @@ export function DesignBible({ slug }: { slug: string }) {
             <SectionTitle>
               Open design questions <span className="text-foreground">{data.questions.length}</span>
             </SectionTitle>
-            <RapidFireLink project={slug} count={data.questions.length} />
+            <span className="flex items-center gap-1">
+              <CheckQuestionsButton project={slug} count={data.questions.length} />
+              <RapidFireLink project={slug} count={data.questions.length} />
+            </span>
           </div>
           <QuestionCards items={data.questions} slugs={{ [data.project]: slug }} onOpen={(nid) => (setStartTab("questions"), select(nid))} />
         </section>
