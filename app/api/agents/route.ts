@@ -1,21 +1,31 @@
 import { findProject, projectSlug } from "@/lib/config";
 import { MODELS, PERMISSION_MODES, getAgents, type PermissionMode } from "@/lib/agents";
+import { agentViews, otherSessions } from "@/lib/agent-views";
+import { folderTrusted } from "@/lib/claude-trust";
 import { listWorktrees } from "@/lib/git";
 import { forbidden, isCrossSite } from "@/lib/guard";
 import { normalizePath, toNativePath } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";
 
-export function GET() {
-  return Response.json({ agents: getAgents().list(), now: Date.now() });
+/** Mondo's agents, plus every other live Claude session on the PC. */
+export async function GET() {
+  return Response.json({ agents: agentViews(), others: await otherSessions(), now: Date.now() });
 }
 
 const WORKTREE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/;
 
+/** Generated worktree name, e.g. "eqx-net-1104-a3f". */
+const autoName = (project: string) => {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${projectSlug(project)}-${p(d.getHours())}${p(d.getMinutes())}-${Math.random().toString(36).slice(2, 5)}`;
+};
+
 /**
  * Start an agent. Body: { project (slug), cwd (the project path or one of its worktrees),
- * newWorktree?, name?, model?, permissionMode?, prompt? }.
- * The folder must belong to a registered project, so nobody can start Claude anywhere else.
+ * newWorktree? (true for an auto name, or a name), name?, model?, permissionMode?, prompt? }.
+ * The folder must belong to a registered project and be one Claude already trusts.
  */
 export async function POST(req: Request) {
   if (isCrossSite(req)) return forbidden();
@@ -35,8 +45,18 @@ export async function POST(req: Request) {
   const cwd = places.find((p) => normalizePath(p) === wanted);
   if (!cwd) return Response.json({ error: "folder is not this project or one of its worktrees" }, { status: 400 });
 
-  const newWorktree = str("newWorktree");
-  if (newWorktree && !WORKTREE_NAME.test(newWorktree)) {
+  if (!folderTrusted(cwd)) {
+    return Response.json(
+      {
+        error: `Claude hasn't been told to trust ${toNativePath(cwd)} yet, so the agent would stop at that question in its window. At the PC, open Git Bash in that folder, run claude once and choose "Yes, I trust this folder".`,
+        code: "untrusted",
+      },
+      { status: 409 },
+    );
+  }
+
+  const wt = b.newWorktree === true ? autoName(project.name) : str("newWorktree");
+  if (wt && !WORKTREE_NAME.test(wt)) {
     return Response.json({ error: "worktree name: letters, numbers, . _ - (max 40)" }, { status: 400 });
   }
   const model = str("model");
@@ -45,18 +65,17 @@ export async function POST(req: Request) {
   if (!PERMISSION_MODES.includes(permissionMode)) {
     return Response.json({ error: "unknown permission mode" }, { status: 400 });
   }
-  const prompt = str("prompt").slice(0, 20_000);
   const count = getAgents().list().filter((a) => a.project === project.name).length;
-  const name = (str("name") || newWorktree || `${projectSlug(project.name)}-${count + 1}`).slice(0, 60);
+  const name = (str("name") || wt || `${projectSlug(project.name)}-${count + 1}`).slice(0, 60);
 
   const agent = getAgents().spawn({
     name,
     project: project.name,
     cwd: toNativePath(cwd),
-    worktreeName: newWorktree || null,
+    worktreeName: wt || null,
     model: model || null,
     permissionMode,
-    prompt,
+    prompt: str("prompt").slice(0, 20_000),
   });
   return Response.json(agent, { status: 201 });
 }

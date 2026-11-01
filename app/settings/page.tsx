@@ -1,9 +1,11 @@
 import { headers } from "next/headers";
 import QRCode from "qrcode";
 import { CheckCircle2, CircleAlert, Cloud, Smartphone, XCircle } from "lucide-react";
-import { remoteInfo, remoteToken } from "@/lib/remote";
+import { remoteInfo } from "@/lib/remote";
 import { listApproved } from "@/lib/devices";
 import { DeviceList } from "@/components/device-list";
+import { TrustButton } from "@/components/trust-button";
+import { folderTrusted } from "@/lib/claude-trust";
 import { getDb } from "@/lib/db";
 import { lastDriveSync, listDriveFiles } from "@/lib/drive";
 import { PageHeader } from "@/components/page-header";
@@ -36,6 +38,8 @@ export default async function SettingsPage() {
     <>
       <PageHeader title="Settings" kicker="Control room" />
       <div className="grid gap-4 p-4 md:p-6 lg:grid-cols-2">
+        <FolderTrust remote={remote} />
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -192,7 +196,7 @@ export default async function SettingsPage() {
 async function PhoneAccess({ remote }: { remote: boolean }) {
   const info = remoteInfo();
   const url = info.urls[0];
-  const pairUrl = url && !remote ? `${url}/__mondo/pair?t=${encodeURIComponent(remoteToken())}` : null;
+  const pairUrl = url && !remote ? url : null;
   const qr = pairUrl && info.enabled
     ? await QRCode.toString(pairUrl, { type: "svg", margin: 1, color: { dark: "#000000", light: "#ffffff" } })
     : null;
@@ -235,8 +239,8 @@ async function PhoneAccess({ remote }: { remote: boolean }) {
             )}
             <div className="min-w-0 space-y-2">
               <p>
-                Scan with your phone&apos;s camera. The phone shows a 4-digit code and this window asks you to allow it;
-                click <b>Allow</b> if the codes match. Approved phones stay signed in until you revoke them.
+                Open this address on your phone (or scan the code), tap <b>Request access</b>, then click <b>Allow</b>{" "}
+                in this window if the 4-digit codes match. Approved phones stay signed in until you revoke them.
               </p>
               <div className="space-y-1">
                 {info.urls.map((u) => (
@@ -246,10 +250,6 @@ async function PhoneAccess({ remote }: { remote: boolean }) {
                 ))}
                 {info.urls.length === 0 && <p className="text-taxi">No network address found.</p>}
               </div>
-              <p className="text-muted-foreground">
-                The QR code only lets a device <i>ask</i>. To change it, delete{" "}
-                <code className="rounded bg-muted px-1">data/remote-token</code> and restart Mondo.
-              </p>
             </div>
           </div>
         )}
@@ -257,6 +257,50 @@ async function PhoneAccess({ remote }: { remote: boolean }) {
           <h3 className="readout">Approved devices</h3>
           <DeviceList devices={devices} canRevoke={!remote} />
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Which projects Claude trusts, with one button to answer all the missing ones at the PC. */
+function FolderTrust({ remote }: { remote: boolean }) {
+  const projects = loadConfig().projects.map((p) => ({ name: p.name, trusted: folderTrusted(p.path) }));
+  const missing = projects.filter((p) => !p.trusted).length;
+  return (
+    <Card className="lg:col-span-2">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          Folder trust
+          {missing === 0 ? (
+            <Badge variant="secondary" className="text-earth">
+              <CheckCircle2 /> All trusted
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="text-taxi">
+              <CircleAlert /> {missing} to do at the PC
+            </Badge>
+          )}
+        </CardTitle>
+        <CardDescription>
+          Claude asks &ldquo;Do you trust this folder?&rdquo; once per project folder. Agents can&apos;t start in a
+          project until that&apos;s answered, and it can only be answered at the PC.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <div className="flex flex-wrap gap-2">
+          {projects.map((p) => (
+            <Badge key={p.name} variant={p.trusted ? "outline" : "destructive"}>
+              {p.trusted ? <CheckCircle2 /> : <XCircle />}
+              {p.name}
+            </Badge>
+          ))}
+        </div>
+        {missing > 0 &&
+          (remote ? (
+            <p className="text-muted-foreground">Next time you&apos;re at the PC, open Settings there to do these in one go.</p>
+          ) : (
+            <TrustButton count={missing} />
+          ))}
       </CardContent>
     </Card>
   );

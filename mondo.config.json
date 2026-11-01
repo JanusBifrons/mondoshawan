@@ -2,7 +2,7 @@
   "server": {
     "host": "127.0.0.1",
     "port": 4317,
-    "lan": { "enabled": false, "host": "0.0.0.0", "port": 4318 }
+    "lan": { "enabled": true, "host": "0.0.0.0", "port": 4318 }
   },
   "projects": [
     {

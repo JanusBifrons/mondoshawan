@@ -41,14 +41,14 @@ npm run fake -- --list       # list scenarios
 ## Using Mondo from your phone
 1. In `mondo.config.json`, set `"lan": { "enabled": true, "host": "0.0.0.0", "port": 4318 }` under `server`.
 2. Restart Mondo. When Windows asks, allow it through the firewall on **private networks only**.
-3. Open **Settings → Phone access** on the PC and scan the QR code with your phone (same Wi-Fi).
+3. On your phone (same Wi-Fi), open `http://<this PC's address>:4318`. **Settings → Phone access** shows the address and a QR code. Tap **Request access**.
 4. The phone shows a 4-digit code and the Mondo window on the PC asks "A device wants to use Mondo". If the codes match, click **Allow**.
 
-Approved phones stay signed in until you click **Revoke** next to them in Settings. The QR code alone only lets a device ask; to change it, delete `data/remote-token` and restart Mondo.
+Approved phones stay signed in until you click **Revoke** next to them in Settings.
 
 ## Pages
 - **Sessions:** live Claude Code sessions.
-- **Agents:** start a Claude Code agent in a project (main checkout, an existing worktree, or a new one), chat with it, interrupt, stop and resume it. Works from the phone.
+- **Agents:** start a Claude Code agent in a project from the PC or your phone. It opens in its own Git Bash window, works in its own worktree and branch, and shows up in the Claude app under Remote Control, where you chat with it. Mondo shows its status and can stop or resume it. Each project folder must be trusted by Claude once (run `claude` there and choose "Yes, I trust this folder").
 - **Knowledge base:** docs from every project in one list, searchable and filterable, with a reading pane. It draws on repo markdown, folders outside the repo, and linked Google Drive docs.
 - **Settings:** hook install status, server address, and registered projects.
 

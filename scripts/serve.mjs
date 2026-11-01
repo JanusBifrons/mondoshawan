@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadToken, startGateway } from "./lan-gateway.mjs";
+import { startGateway } from "./lan-gateway.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dev = process.argv.includes("--dev");
@@ -53,7 +53,6 @@ if (lan.enabled && process.env.MONDO_LAN !== "0") {
     host: lan.host,
     port: Number(lan.port),
     target: { host: connectHost, port: Number(port) },
-    getToken: () => loadToken(dataDir),
     dbFile: process.env.MONDO_DB || path.join(dataDir, "mondo.db"),
   });
 }

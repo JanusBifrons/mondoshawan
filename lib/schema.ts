@@ -94,6 +94,11 @@ export const MIGRATIONS: readonly string[] = [
   `,
   // 3: phones paired through the LAN gateway
   DEVICES_TABLE_SQL,
+  // 4: agents now run as Remote Control sessions in their own Git Bash window.
+  //    pid = the claude.exe process (to stop it); agent_entries is no longer written.
+  `
+  ALTER TABLE agents ADD COLUMN pid INTEGER;
+  `,
 ];
 
 /**

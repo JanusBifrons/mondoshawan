@@ -3,6 +3,7 @@ import { Chakra_Petch, Share_Tech_Mono, Syncopate } from "next/font/google";
 import "./globals.css";
 import { headers } from "next/headers";
 import { AppSidebar } from "@/components/app-sidebar";
+import { MobileNav } from "@/components/mobile-nav";
 import { PairingPrompt } from "@/components/pairing-prompt";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -34,7 +35,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <TooltipProvider>
             <SidebarProvider>
               <AppSidebar projects={projects} />
-              <SidebarInset className="min-w-0 bg-transparent">{children}</SidebarInset>
+              <SidebarInset className="min-w-0 bg-transparent">
+                {children}
+                <MobileNav />
+              </SidebarInset>
               {!remote && <PairingPrompt />}
             </SidebarProvider>
           </TooltipProvider>

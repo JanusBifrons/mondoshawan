@@ -3,18 +3,20 @@
 // Mondo's Next server stays on 127.0.0.1 (hooks and the desktop window talk to it with no
 // auth). This gateway listens on the network and forwards to it, but only for approved
 // devices:
-//   1. The phone opens the QR link from Settings: /__mondo/pair?t=<pairing token>.
+//   1. The phone opens the gateway's address (or scans the QR in Settings) and taps
+//      "Request access" (POST /__mondo/pair).
 //   2. The gateway records a pending device with a 4-digit code and gives the phone a cookie
 //      holding that device's own secret. The phone waits on /__mondo/wait.
 //   3. The PC (Mondo window) asks "Allow this phone? code 1234". Approval happens only on
 //      the PC: Next refuses approval requests that came through this gateway.
-//   4. From then on, that cookie is the phone's key, until it is revoked in Settings.
-// The pairing token alone gets you nothing but a prompt on the PC.
+//   4. From then on, that cookie is the phone's key, until it is revoked in Settings. It only
+//      works from the address the phone paired from, so a copied cookie is useless elsewhere.
+// Anyone on the network can ask, but only a click on the PC lets them in. At most 3
+// requests can wait at once, so nobody can flood the PC with prompts.
 //
 // Forwarded requests have their Host and Origin rewritten to the local server, so Next's
 // cross-site guard and dev-server origin checks see an ordinary local request, and gain
 // `x-mondo-remote: 1` so pages can tell (to hide the QR and refuse approvals).
-import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -27,31 +29,6 @@ import {
 } from "./lan-devices.mjs";
 
 const YEAR = 365 * 24 * 3600;
-
-/** Read the pairing token from data/remote-token, creating it on first use. */
-export function loadToken(dataDir) {
-  const file = path.join(dataDir, "remote-token");
-  try {
-    const t = fs.readFileSync(file, "utf8").trim();
-    if (t.length >= 32) return t;
-  } catch {
-    /* create below */
-  }
-  fs.mkdirSync(dataDir, { recursive: true });
-  const t = crypto.randomBytes(24).toString("base64url");
-  try {
-    fs.writeFileSync(file, t, { flag: "wx" });
-    return t;
-  } catch {
-    return fs.readFileSync(file, "utf8").trim(); // someone else created it first
-  }
-}
-
-function same(a, b) {
-  const x = Buffer.from(String(a));
-  const y = Buffer.from(String(b));
-  return x.length === y.length && crypto.timingSafeEqual(x, y);
-}
 
 function readCookie(req, name) {
   for (const part of (req.headers.cookie ?? "").split(";")) {
@@ -79,12 +56,10 @@ const page = (body, script = "") => `<!doctype html>
 </style></head>
 <body><main><h1>MONDO</h1>${body}</main>${script ? `<script>${script}</script>` : ""}</body></html>`;
 
-const loginPage = (error = "") =>
+const loginPage = () =>
   page(`
-  <p>Scan the QR code under <b>Settings → Phone access</b> in Mondo on your PC, or paste the pairing token.</p>
-  ${error ? `<p class="err">${esc(error)}</p>` : ""}
-  <form method="get" action="/__mondo/pair">
-    <input name="t" placeholder="Pairing token" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <p>This device isn't approved to use Mondo yet. Tap below, then click <b>Allow</b> in Mondo on your PC.</p>
+  <form method="post" action="/__mondo/pair">
     <button>Request access</button>
   </form>`);
 
@@ -102,11 +77,10 @@ const endedPage = (msg) =>
   page(`<p>${esc(msg)}</p><a class="btn" href="/__mondo/login">Start again</a>`);
 
 /**
- * Start the gateway. `target` is the local Next server; `getToken` returns the pairing
- * token (read per request, so deleting data/remote-token and restarting rotates it);
- * `dbFile` is Mondo's SQLite database, where devices live.
+ * Start the gateway. `target` is the local Next server; `dbFile` is Mondo's SQLite
+ * database, where devices live.
  */
-export function startGateway({ host, port, target, getToken, dbFile }) {
+export function startGateway({ host, port, target, dbFile }) {
   const targetHost = `${target.host}:${target.port}`;
   const targetOrigin = `http://${targetHost}`;
 
@@ -127,7 +101,7 @@ export function startGateway({ host, port, target, getToken, dbFile }) {
     const c = readCookie(req, COOKIE);
     if (!c) return null;
     try {
-      return deviceForCookie(getDb(), c);
+      return deviceForCookie(getDb(), c, req.socket.remoteAddress ?? "");
     } catch (err) {
       console.error(`[mondo] LAN gateway: ${err.message}`);
       return null;
@@ -177,8 +151,8 @@ export function startGateway({ host, port, target, getToken, dbFile }) {
     if (url.pathname === "/__mondo/login") return html(res, 200, loginPage());
 
     if (url.pathname === "/__mondo/pair") {
-      const t = url.searchParams.get("t")?.trim() ?? "";
-      if (!t || !same(t, getToken())) return html(res, t ? 401 : 200, loginPage(t ? "That pairing token didn't match." : ""));
+      // POST only, so link previews and prefetching never create a request.
+      if (req.method !== "POST") return html(res, 303, "", { Location: "/" });
       if (device?.status === "approved") return html(res, 303, "", { Location: "/" });
       if (device?.status === "pending") return html(res, 303, "", { Location: "/__mondo/wait" });
       let r;
@@ -206,6 +180,8 @@ export function startGateway({ host, port, target, getToken, dbFile }) {
           return html(res, 200, waitPage(device.code));
         case "denied":
           return html(res, 403, endedPage("Access was denied on the PC."));
+        case "moved":
+          return html(res, 403, endedPage("This phone's network address has changed since it was approved, so Mondo needs to approve it again."));
         case "revoked":
           return html(res, 403, endedPage("This device was signed out of Mondo."));
         case "expired":
