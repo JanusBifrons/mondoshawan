@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ChaseBoard } from "@/components/design-bible";
-import { Collapsed, QuestionCards, SectionTitle, StartDiscussion } from "@/components/design-home";
+import { Collapsed, QuestionCards, RapidFireLink, SectionTitle, StartDiscussion } from "@/components/design-home";
 import { PageHeader } from "@/components/page-header";
 import { loadConfig, projectSlug } from "@/lib/config";
 import { getDb } from "@/lib/db";
@@ -42,9 +42,12 @@ export default function DesignPage() {
         <StartDiscussion projects={projectList} />
 
         <section className="space-y-2">
-          <SectionTitle>
-            Open design questions <span className="text-foreground">{questions.length}</span>
-          </SectionTitle>
+          <div className="flex items-center justify-between gap-2">
+            <SectionTitle>
+              Open design questions <span className="text-foreground">{questions.length}</span>
+            </SectionTitle>
+            <RapidFireLink count={questions.length} />
+          </div>
           <QuestionCards items={questions} slugs={Object.fromEntries(slugOf)} showProject />
         </section>
 

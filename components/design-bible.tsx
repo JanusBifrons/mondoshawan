@@ -60,6 +60,7 @@ import {
   ChangedSection,
   Collapsed,
   QuestionCards,
+  RapidFireLink,
   RegenerateButton,
   SectionTitle,
   StartDiscussion,
@@ -1515,9 +1516,12 @@ export function DesignBible({ slug }: { slug: string }) {
         <GapsStrip tree={tree} active={gap} onPick={setGap} />
         <StartDiscussion project={slug} />
         <section className="space-y-2">
-          <SectionTitle>
-            Open design questions <span className="text-foreground">{data.questions.length}</span>
-          </SectionTitle>
+          <div className="flex items-center justify-between gap-2">
+            <SectionTitle>
+              Open design questions <span className="text-foreground">{data.questions.length}</span>
+            </SectionTitle>
+            <RapidFireLink project={slug} count={data.questions.length} />
+          </div>
           <QuestionCards items={data.questions} slugs={{ [data.project]: slug }} onOpen={(nid) => (setStartTab("questions"), select(nid))} />
         </section>
         <ChangedSection

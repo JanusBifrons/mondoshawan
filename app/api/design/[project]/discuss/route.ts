@@ -18,7 +18,7 @@ export async function POST(req: Request, { params }: Ctx) {
   if (isCrossSite(req)) return forbidden();
   const project = findProject((await params).project);
   if (!project) return Response.json({ error: "unknown project" }, { status: 404 });
-  let b: { node?: unknown; message?: unknown; question?: unknown };
+  let b: { node?: unknown; message?: unknown; question?: unknown; rapid?: unknown };
   try {
     b = await req.json();
   } catch {
@@ -29,7 +29,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const message = typeof b.message === "string" ? b.message : "";
   try {
     await codeChanges(getDb(), project).catch(() => null); // so the agent knows which nodes are stale
-    const talk = startTalk(getDb(), project, { node, question, message });
+    const talk = startTalk(getDb(), project, { node, question, message, rapid: b.rapid === true });
     return Response.json({ talkId: talk.id }, { status: 201 });
   } catch (err) {
     if (err instanceof DesignError) return Response.json({ error: err.message }, { status: err.status });

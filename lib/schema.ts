@@ -301,4 +301,6 @@ export const DESIGN_COLUMNS: readonly { table: string; column: string; ddl: stri
   { table: "design_talk_turns", column: "auto", ddl: "INTEGER NOT NULL DEFAULT 0" },
   // The owner's tweak when they ask for a card to be revised.
   { table: "design_talk_decisions", column: "note", ddl: "TEXT" },
+  // Talks started from rapid fire (a queue of questions): no "carry on" turn once the question is closed.
+  { table: "design_talks", column: "rapid", ddl: "INTEGER NOT NULL DEFAULT 0" },
 ];

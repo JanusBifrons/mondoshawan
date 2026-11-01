@@ -397,7 +397,7 @@ function runTurn(db: DB, project: ProjectConfig, talk: Row, text: string, first:
 export function startTalk(
   db: DB,
   project: ProjectConfig,
-  opts: { node?: string | null; question?: number; message?: string },
+  opts: { node?: string | null; question?: number; message?: string; rapid?: boolean },
 ): Talk {
   let nodeId: string | null = null;
   let title = `${project.name} design`;
@@ -422,8 +422,8 @@ export function startTalk(
   const id = crypto.randomBytes(5).toString("hex");
   const now = Date.now();
   db.prepare(
-    "INSERT INTO design_talks (id, project, node_id, question_id, session_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-  ).run(id, project.name, nodeId, question?.id ?? null, crypto.randomUUID(), title.slice(0, 200), now, now);
+    "INSERT INTO design_talks (id, project, node_id, question_id, session_id, title, created_at, updated_at, rapid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  ).run(id, project.name, nodeId, question?.id ?? null, crypto.randomUUID(), title.slice(0, 200), now, now, opts.rapid ? 1 : 0);
   const talk = talkRow(db, id);
 
   const text = (opts.message ?? "").trim().slice(0, 20_000);
@@ -515,8 +515,10 @@ export function decide(
   ).run(jobId, idx, talkId, status, error, Date.now(), decision === "revise" ? tweak : null);
   db.prepare("UPDATE design_talks SET updated_at = ? WHERE id = ?").run(Date.now(), talkId);
 
+  // Rapid fire: once the question is closed, the queue moves on, so no "carry on" turn (saves tokens).
+  const questionClosed = !!talk.rapid && !!talk.question_id && getQuestion(db, talk.question_id)?.status !== "open";
   // Carry on without the owner having to say "next".
-  if (status !== "failed") {
+  if (status !== "failed" && !(questionClosed && status !== "revise")) {
     if (status === "revise") {
       runTurn(db, project, talk, `Tweak to "${p.title}": ${tweak}`, false, {
         prompt: "Make that tweak to the card, keep everything else as it was, and propose the corrected card.",

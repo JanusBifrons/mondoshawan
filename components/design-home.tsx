@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, CircleHelp, Loader2, MessagesSquare, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight, CircleHelp, Loader2, MessagesSquare, RefreshCw, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { QuestionListItem, TreeNode } from "@/lib/design";
@@ -253,6 +253,18 @@ export function Collapsed({ title, count, children }: { title: string; count: nu
       </button>
       {open && children}
     </section>
+  );
+}
+
+/** Opens rapid fire: the open questions one after another, a fresh agent for each. */
+export function RapidFireLink({ project, count }: { project?: string; count: number }) {
+  if (!count) return null;
+  return (
+    <Button asChild size="sm" variant="outline">
+      <a href={`/design/rapid${project ? `?project=${encodeURIComponent(project)}` : ""}`}>
+        <Zap /> Rapid fire
+      </a>
+    </Button>
   );
 }
 
