@@ -62,6 +62,7 @@ import {
   QuestionCards,
   RapidFireLink,
   CheckQuestionsButton,
+  FindMissingButton,
   RegenerateButton,
   SectionTitle,
   StartDiscussion,
@@ -1534,7 +1535,10 @@ export function DesignBible({ slug }: { slug: string }) {
           against={changes.against}
           onOpen={(nid) => (setStartTab("reality"), select(nid))}
         />
-        <h2 className="readout pt-2">Explore the design</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+          <h2 className="readout">Explore the design</h2>
+          <FindMissingButton project={slug} />
+        </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-lg border p-0.5">

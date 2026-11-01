@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, CircleHelp, ListChecks, Loader2, MessagesSquare, RefreshCw, Zap } from "lucide-react";
+import { ChevronDown, ChevronRight, CircleHelp, ListChecks, Loader2, MessagesSquare, RefreshCw, ScanSearch, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { QuestionListItem, TreeNode } from "@/lib/design";
@@ -294,6 +294,38 @@ export function CheckQuestionsButton({ project, count }: { project: string; coun
     <span className="flex items-center gap-2">
       <Button size="sm" variant="ghost" disabled={busy} onClick={run} title="A background job checks each open question isn't micro detail or already answered, and suggests which to drop">
         {busy ? <Loader2 className="animate-spin" /> : <ListChecks />} <span className="hidden sm:inline">Check questions</span>
+      </Button>
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </span>
+  );
+}
+
+/**
+ * "Find what's missing": a background job compares what's built in the merged code with the tree
+ * and adds nodes (with Reality) for built features that have none. Run it before an "Update all".
+ */
+export function FindMissingButton({ project }: { project: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async () => {
+    if (!confirm("Start a background job that reads the merged code and recent merged PRs, and adds a node for every built feature the design bible is missing? It writes the new nodes' Reality from the code.")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await fetch(`/api/design/${project}/coverage`, { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      router.push(`/agents/job/${encodeURIComponent(d.jobId)}`);
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <span className="flex items-center gap-2">
+      <Button size="sm" variant="ghost" disabled={busy} onClick={run} title="Add nodes for built features the design bible doesn't have yet">
+        {busy ? <Loader2 className="animate-spin" /> : <ScanSearch />} Find what&apos;s missing
       </Button>
       {error && <span className="text-xs text-destructive">{error}</span>}
     </span>

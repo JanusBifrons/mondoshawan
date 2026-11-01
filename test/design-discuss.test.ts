@@ -344,3 +344,15 @@ describe("checking the open questions", () => {
     expect(triageDrops(null)).toEqual([]);
   });
 });
+
+describe("finding what's missing", () => {
+  it("briefs the job to add built features with no node, without duplicating", async () => {
+    const { coverageInstruction } = await import("@/lib/design-coverage");
+    const b = coverageInstruction({ name: "EQX-Net", path: "C:/x/eqx-net" }, "coverage");
+    expect(b).toContain("gh pr list --state merged");
+    expect(b).toContain("NOT missing");
+    expect(b).toContain('stage "built"');
+    expect(b).toContain("write_reality");
+    expect(b).toContain("don't retire or change them");
+  });
+});
