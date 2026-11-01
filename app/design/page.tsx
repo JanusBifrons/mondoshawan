@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { ChaseBoard } from "@/components/design-bible";
+import { Collapsed, QuestionCards, SectionTitle, StartDiscussion } from "@/components/design-home";
 import { PageHeader } from "@/components/page-header";
 import { loadConfig, projectSlug } from "@/lib/config";
 import { getDb } from "@/lib/db";
-import { bandOf, gaps, listOpenChases, listTree } from "@/lib/design";
+import { bandOf, gaps, listOpenChases, listOpenQuestions, listTree } from "@/lib/design";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,8 @@ export default function DesignPage() {
   });
 
   const slugOf = new Map(loadConfig().projects.map((p) => [p.name, projectSlug(p.name)]));
+  const questions = listOpenQuestions(db).filter((q) => slugOf.has(q.project));
+  const projectList = loadConfig().projects.map((p) => ({ slug: projectSlug(p.name), name: p.name }));
   const chases = listOpenChases(db)
     .filter((c) => slugOf.has(c.project))
     .map((c) => ({ ...c, slug: slugOf.get(c.project)! }));
@@ -36,7 +39,16 @@ export default function DesignPage() {
           Each project&apos;s living design, from what the game does today (ground, written by agents from the code) through
           what&apos;s approved and being built (the grey zone) up to ideas (sky).
         </p>
-        <ChaseBoard items={chases} />
+        <StartDiscussion projects={projectList} />
+
+        <section className="space-y-2">
+          <SectionTitle>
+            Open design questions <span className="text-foreground">{questions.length}</span>
+          </SectionTitle>
+          <QuestionCards items={questions} slugs={Object.fromEntries(slugOf)} showProject />
+        </section>
+
+        <h2 className="readout">Projects</h2>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {projects.map((p) => (
             <Link key={p.slug} href={`/design/${p.slug}`} className="frame block rounded-lg border bg-card/60 p-4 transition-colors hover:border-leeloo">
@@ -63,6 +75,10 @@ export default function DesignPage() {
             </Link>
           ))}
         </div>
+
+        <Collapsed title="Follow-ups" count={chases.length}>
+          <ChaseBoard items={chases} />
+        </Collapsed>
       </div>
     </>
   );

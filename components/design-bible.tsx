@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   AlarmClock,
@@ -53,7 +53,9 @@ import {
   type LinkType,
   type Stage,
 } from "@/lib/design-meta";
-import type { ChaseListItem, DesignEvent, NodeDetail, Revision, TreeNode } from "@/lib/design";
+import type { ChaseListItem, DesignEvent, NodeDetail, QuestionListItem, Revision, TreeNode } from "@/lib/design";
+import { Collapsed, QuestionCards, SectionTitle, StartDiscussion } from "@/components/design-home";
+import { findNodeRef, wikiLinks } from "@/lib/design-links";
 
 // ---------- look ----------
 
@@ -100,11 +102,50 @@ const fmt = (t: number) =>
 
 const who = (actor: string) => (actor === "human" ? "You" : actor.replace(/^agent:/, "Agent · "));
 
+/**
+ * Links between nodes inside design text, so nothing needs outside context. Write
+ * `[[Sectors]]`, `[[Galaxy map/Sectors|sectors]]` or `[sectors](node:<id or title path>)`.
+ * A link opens that node; one to a node that doesn't exist yet shows dotted.
+ */
+const NodeLinks = createContext<{ tree: TreeNode[]; onSelect: (id: string) => void } | null>(null);
+
+function NodeLink({ href, children }: { href: string; children: React.ReactNode }) {
+  const ctx = useContext(NodeLinks);
+  const ref = decodeURI(href.slice("node:".length));
+  const target = ctx ? findNodeRef(ctx.tree, ref) : null;
+  if (!target || !ctx) {
+    return (
+      <span className="cursor-help underline decoration-dotted" title={`No design node called "${ref}" yet`}>
+        {children}
+      </span>
+    );
+  }
+  return (
+    <button type="button" className="font-medium text-diva underline underline-offset-2 hover:text-leeloo" onClick={() => ctx.onSelect(target.id)}>
+      {children}
+    </button>
+  );
+}
+
 function Markdown({ children }: { children: string }) {
   return (
     <article className="prose prose-sm max-w-none break-words dark:prose-invert prose-headings:font-[family-name:var(--ff-display)] prose-headings:uppercase prose-headings:tracking-wider prose-headings:text-leeloo prose-a:text-diva prose-strong:text-foreground prose-code:text-taxi prose-pre:overflow-x-auto prose-table:block prose-table:overflow-x-auto">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ img: () => null }}>
-        {children}
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        urlTransform={(url) => (url.startsWith("node:") ? url : defaultUrlTransform(url))}
+        components={{
+          img: () => null,
+          a: ({ href, children }) =>
+            href?.startsWith("node:") ? (
+              <NodeLink href={href}>{children}</NodeLink>
+            ) : (
+              <a href={href} target="_blank" rel="noreferrer">
+                {children}
+              </a>
+            ),
+        }}
+      >
+        {wikiLinks(children)}
       </ReactMarkdown>
     </article>
   );
@@ -154,6 +195,7 @@ interface TreeData {
   project: string;
   tree: TreeNode[];
   chases: ChaseListItem[];
+  questions: QuestionListItem[];
   events: DesignEvent[];
   lastEvent: number;
 }
@@ -581,6 +623,7 @@ function NodePanel({
   lastEvent,
   onSelect,
   onReload,
+  initialTab,
 }: {
   slug: string;
   id: string;
@@ -588,13 +631,21 @@ function NodePanel({
   lastEvent: number;
   onSelect: (id: string) => void;
   onReload: () => void;
+  /** Open on this tab (e.g. "questions" when arriving from a question card). */
+  initialTab?: Tab;
 }) {
   const { detail, error, reload } = useNode(slug, id, lastEvent);
   const refresh = useCallback(() => {
     reload();
     onReload();
   }, [reload, onReload]);
-  const [tab, setTab] = useState<Tab>("intent");
+  const [tab, setTab] = useState<Tab>(initialTab ?? "intent");
+  const tabChosen = useRef(!!initialTab);
+  useEffect(() => {
+    if (!detail || tabChosen.current) return;
+    tabChosen.current = true;
+    if (detail.reality) setTab("reality");
+  }, [detail]);
   const [adding, setAdding] = useState(false);
 
   if (error) return <p className="p-4 text-sm text-destructive">{error}</p>;
@@ -602,10 +653,18 @@ function NodePanel({
   const { node } = detail;
   const openQ = detail.questions.filter((q) => q.status === "open").length;
   const openR = detail.reviews.filter((r) => r.status === "open").length;
+  const openC = detail.chases.filter((c) => c.status === "open").length;
 
   const tabs: { key: Tab; label: string; badge?: number; urgent?: boolean }[] = [
-    { key: "intent", label: "Intent" },
-    { key: "reality", label: "Reality" },
+    ...(detail.reality
+      ? ([
+          { key: "reality", label: "Reality" },
+          { key: "intent", label: "Intent" },
+        ] as const)
+      : ([
+          { key: "intent", label: "Intent" },
+          { key: "reality", label: "Reality" },
+        ] as const)),
     { key: "reviews", label: "Reviews", badge: openR, urgent: openR > 0 },
     { key: "questions", label: "Questions", badge: openQ, urgent: detail.questions.some((q) => q.status === "open" && q.blocking) },
     { key: "links", label: "Links", badge: detail.links.length },
@@ -642,9 +701,25 @@ function NodePanel({
             </span>
           )}
         </div>
-        <StageControl slug={slug} detail={detail} onDone={refresh} />
-        <PriorityControl slug={slug} node={node} onDone={refresh} />
-        <ChasesBlock slug={slug} detail={detail} onDone={refresh} />
+        <StartDiscussion key={node.id} project={slug} node={{ id: node.id, title: node.title }} compact />
+        <details className="group rounded-lg border px-3 py-2">
+          <summary className="readout cursor-pointer list-none hover:text-leeloo">
+            <span className="inline-block transition-transform group-open:rotate-90">›</span> Manage: stage, priority, follow-ups
+            {openC > 0 && <span className="text-taxi"> · {openC} follow-up{openC === 1 ? "" : "s"}</span>}
+          </summary>
+          <div className="mt-3 space-y-3">
+            <StageControl slug={slug} detail={detail} onDone={refresh} />
+            <PriorityControl slug={slug} node={node} onDone={refresh} />
+            <ChasesBlock slug={slug} detail={detail} onDone={refresh} />
+            {adding ? (
+              <AddNodeForm slug={slug} parent={node} onDone={() => setAdding(false)} onCreated={(nid) => (refresh(), onSelect(nid))} />
+            ) : (
+              <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+                <Plus /> Add an idea under this
+              </Button>
+            )}
+          </div>
+        </details>
         {detail.children.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {detail.children.map((c) => (
@@ -658,13 +733,6 @@ function NodePanel({
             ))}
           </div>
         )}
-        {adding ? (
-          <AddNodeForm slug={slug} parent={node} onDone={() => setAdding(false)} onCreated={(nid) => (refresh(), onSelect(nid))} />
-        ) : (
-          <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
-            <Plus /> Add an idea under this
-          </Button>
-        )}
       </div>
 
       <div className="flex gap-1 overflow-x-auto border-b px-2" role="tablist">
@@ -673,7 +741,7 @@ function NodePanel({
             key={t.key}
             role="tab"
             aria-selected={tab === t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => ((tabChosen.current = true), setTab(t.key))}
             className={cn(
               "readout flex shrink-0 items-center gap-1 border-b-2 border-transparent px-2.5 py-2 transition-colors hover:text-foreground",
               tab === t.key && "border-leeloo text-leeloo",
@@ -1288,11 +1356,15 @@ export function DesignBible({ slug }: { slug: string }) {
   const [gap, setGap] = useState<GapKey | null>(null);
   const [showRetired, setShowRetired] = useState(false);
   const [addingRoot, setAddingRoot] = useState(false);
+  const [startTab, setStartTab] = useState<Tab | undefined>(undefined);
 
   // Keep the selected node in the URL (?node=) so links and reloads land on it.
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("node");
+    const q = new URLSearchParams(window.location.search);
+    const id = q.get("node");
     if (id) setSelected(id);
+    const t = q.get("tab");
+    if (t) setStartTab(t as Tab);
   }, []);
   const select = useCallback((id: string | null) => {
     setSelected(id);
@@ -1310,14 +1382,32 @@ export function DesignBible({ slug }: { slug: string }) {
   const filtered = gapDef ? tree.filter((n) => n.stage !== "retired" && gapDef.test(n)) : null;
 
   const panel = selected && (
-    <NodePanel slug={slug} id={selected} tree={tree} lastEvent={lastEvent} onSelect={select} onReload={reload} />
+    <NodeLinks.Provider value={{ tree, onSelect: (nid: string) => (setStartTab(undefined), select(nid)) }}>
+    <NodePanel
+      key={`${selected}:${startTab ?? ""}`}
+      slug={slug}
+      id={selected}
+      tree={tree}
+      lastEvent={lastEvent}
+      onSelect={(nid) => (setStartTab(undefined), select(nid))}
+      onReload={reload}
+      initialTab={startTab}
+    />
+    </NodeLinks.Provider>
   );
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
       <div className="min-w-0 space-y-4">
         <GapsStrip tree={tree} active={gap} onPick={setGap} />
-        <ChaseList items={data.chases} slug={slug} onSelect={select} onChanged={reload} />
+        <StartDiscussion project={slug} />
+        <section className="space-y-2">
+          <SectionTitle>
+            Open design questions <span className="text-foreground">{data.questions.length}</span>
+          </SectionTitle>
+          <QuestionCards items={data.questions} slugs={{ [data.project]: slug }} onOpen={(nid) => (setStartTab("questions"), select(nid))} />
+        </section>
+        <h2 className="readout pt-2">Explore the design</h2>
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-lg border p-0.5">
@@ -1364,6 +1454,9 @@ export function DesignBible({ slug }: { slug: string }) {
         </div>
 
         <Legend />
+        <Collapsed title="Follow-ups" count={data.chases.length}>
+          <ChaseList items={data.chases} slug={slug} onSelect={select} onChanged={reload} />
+        </Collapsed>
       </div>
 
       {wide ? (

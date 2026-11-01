@@ -1,6 +1,6 @@
 import { findProject } from "@/lib/config";
 import { getDb } from "@/lib/db";
-import { DesignError, HUMAN, lastEventId, listOpenChases, listTree, recentEvents } from "@/lib/design";
+import { DesignError, HUMAN, lastEventId, listOpenChases, listOpenQuestions, listTree, recentEvents } from "@/lib/design";
 import { runAction, type ActionInput } from "@/lib/design-actions";
 import { forbidden, isCrossSite } from "@/lib/guard";
 
@@ -17,6 +17,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     project: project.name,
     tree: listTree(db, project.name),
     chases: listOpenChases(db, project.name),
+    questions: listOpenQuestions(db, project.name),
     events: recentEvents(db, project.name, 30),
     lastEvent: lastEventId(db, project.name),
   });

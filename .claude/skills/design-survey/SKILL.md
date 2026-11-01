@@ -45,6 +45,8 @@ Survey **one system at a time** (e.g. "Weapons"), as asked. Don't survey the who
    `ensure` creates missing nodes along the path (parents get `parentKind`, default `system`) and leaves existing ones alone. Kinds: `system`, `mechanic`, `feature`, `content`, `other`.
 
 4. **Write reality** for each node: plain designer language, in maximum useful detail.
+   - **Plain English that needs zero context.** Someone who has never seen the game or the code should understand it. Open with one or two sentences on what the thing *is* and what it's *for*, then the detail. No code names, file names or jargon in the prose. If a term is unavoidable, say what it means.
+   - **Link everything you mention that has its own node:** `[[Sectors]]`, `[[Galaxy map/Sectors|sectors]]` (title path, with optional label). Links open that node in Mondo, so readers follow them for context and you don't repeat it. If something deserves its own node and doesn't have one, create it (Built) and link it. Example: "The galaxy map is an overview of all [[Sectors|sectors]]. It's dynamic and can hold any number of them."
    - Cover what happens, the numbers (speeds, ranges, timers, costs), edge cases, and what the player sees and feels.
    - Note anything half-built, stubbed, disabled or behind a flag. Say "not implemented" plainly where that's the truth.
    - Markdown is fine. Don't paste code.
