@@ -9,6 +9,8 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
 ## Working on this repo
 - **Each agent works in its own branch and git worktree and opens a PR into `main`.** Never commit straight to `main` in the main checkout: several sessions often run at once. Commit and push freely on your branch.
 - Remote: github.com/JanusBifrons/mondoshawan. Open PRs with `gh pr create`.
+- **PRs into main auto-merge as soon as the CI `verify` check passes** (`.github/workflows/auto-merge.yml`), and merged branches are deleted hourly. So once a PR is open, never push more work to its branch: it may already be merged, and later commits get stranded. Start a new branch and PR instead. Open a PR only when the work is finished and tested (or as a draft to keep it open).
+- CI runs on Linux: keep tests OS-independent (no `path.resolve` on Windows-style paths).
 - **CI and auto-merge:**
   - **CI** (`.github/workflows/ci.yml`, job `verify`) runs typecheck, tests and `next build` on every PR and on pushes to `main`. `main` is protected: a PR can only merge once `verify` passes.
   - **Every PR merges itself once it's green.** `.github/workflows/auto-merge.yml` turns on auto-merge (merge commit) when a PR opens. `branch-cleanup.yml` deletes merged branches hourly, because GitHub doesn't trigger workflows or delete-on-merge for merges made by the Actions bot. For the same reason, CI on `main` doesn't re-run after those merges; the PR run is the check. To be safe, also run `gh pr merge <n> --auto --merge` right after `gh pr create`.

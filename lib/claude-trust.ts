@@ -17,7 +17,9 @@ import path from "node:path";
 
 /** The spelling Claude uses as a key: forward slashes, upper-case drive, no trailing slash. */
 export function trustKey(p: string): string {
-  let s = path.resolve(p).replace(/\\/g, "/").replace(/\/+$/, "");
+  // Plain string rules (not path.resolve), so it behaves the same on any OS, e.g. in CI.
+  let s = p.replace(/\\/g, "/").replace(/\/+$/, "");
+  s = s.replace(/^\/([a-zA-Z])(\/|$)/, "$1:/"); // Git Bash /c/x -> c:/x
   s = s.replace(/^([a-z]):/, (_, d: string) => d.toUpperCase() + ":");
   return s;
 }

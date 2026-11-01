@@ -12,6 +12,7 @@ describe("Claude folder trust", () => {
 
   it("uses Claude's key spelling", () => {
     expect(trustKey("c:\\Users\\a\\x\\")).toBe("C:/Users/a/x");
+    expect(trustKey("/c/Users/a/x")).toBe("C:/Users/a/x");
   });
 
   it("only an exact \"yes\" entry counts", () => {
