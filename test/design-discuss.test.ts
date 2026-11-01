@@ -42,7 +42,9 @@ describe("design talk brief", () => {
     expect(b).toContain("never change any file");
     expect(b).toContain("leave pure taste");
     expect(b).toContain("can't write to the bible yourself");
-    expect(b).toContain("only when the owner locks it in");
+    expect(b).toContain("only when the owner approves it");
+    expect(b).toContain("Approve as idea");
+    expect(b).toContain("carry on with the next aspect without waiting to be asked");
     expect(b).toContain("1. Discovery.");
     expect(b).toContain("Propose nothing in this phase");
     expect(b).toContain("Lock-down, one aspect at a time");
@@ -190,5 +192,20 @@ describe("one card at a time, locked in as a draft or approved", () => {
     expect(row(b.id).stage).not.toBe("approved");
     expect(row(b.id).signed_at).toBeNull();
     expect(() => applyProposal(db, project, { node_id: a.id }, [{ action: "ask", args: { text: "Why?" } }], { approve: true })).toThrow(/no Intent/);
+
+    // Approved as an idea: saved, unsigned, and kept at stage idea even if proposed as "proposed".
+    applyProposal(
+      db,
+      project,
+      { node_id: null },
+      [
+        { action: "add_node", args: { title: "Mines", stage: "proposed" } },
+        { action: "write_intent", args: { node: "Mines", text: "Mines float in space." } },
+      ],
+      { idea: true },
+    );
+    const mines = db.prepare("SELECT id FROM design_nodes WHERE title = 'Mines'").get() as { id: string };
+    expect(row(mines.id).stage).toBe("idea");
+    expect(row(mines.id).signed_at).toBeNull();
   });
 });

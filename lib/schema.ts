@@ -297,4 +297,8 @@ export const DESIGN_COLUMNS: readonly { table: string; column: string; ddl: stri
   { table: "design_nodes", column: "priority", ddl: "TEXT NOT NULL DEFAULT 'normal'" },
   // The Claude session id of the agent the owner is talking a question through with.
   { table: "design_questions", column: "discussion", ddl: "TEXT" },
+  // A turn Mondo sent on the owner's behalf after they decided a card (shown as a small note).
+  { table: "design_talk_turns", column: "auto", ddl: "INTEGER NOT NULL DEFAULT 0" },
+  // The owner's tweak when they ask for a card to be revised.
+  { table: "design_talk_decisions", column: "note", ddl: "TEXT" },
 ];

@@ -26,8 +26,14 @@ export interface Proposal {
   detail: string;
   actions: TalkAction[];
   /** The owner's decision, if made. */
-  /** approved = saved as a draft; locked = saved and approved (Intent signed, stage approved). */
-  status: "pending" | "approved" | "locked" | "skipped" | "failed";
+  /**
+   * locked = approved (Intent signed, stage approved: to be added to the game);
+   * idea = approved as an idea (saved, stays an idea, not for development without review);
+   * revise = the owner asked for a tweak (a corrected card follows); approved = saved as a draft (older talks).
+   */
+  status: "pending" | "locked" | "idea" | "revise" | "approved" | "skipped" | "failed";
+  /** The owner's tweak, when they asked for a revision. */
+  note: string | null;
   error: string | null;
 }
 
@@ -35,6 +41,8 @@ export interface TalkTurn {
   id: number;
   /** What the owner said (or the opening request). */
   text: string;
+  /** Sent by Mondo after the owner decided a card ("Approved X"), so the talk carries on by itself. */
+  auto: boolean;
   createdAt: number;
   jobId: string | null;
   status: "thinking" | "done" | "failed" | "stopped";
@@ -139,10 +147,10 @@ export function talkBrief(opts: {
     `**Work in two phases, at the owner's pace. Never rush to proposals.**`,
     `**1. Discovery.** First understand the idea through back-and-forth: what the owner wants and why, how big it is, what's in and out of scope, what already exists (read the bible and the code), and what it touches. Ask one question per reply, with options and your recommendation, and play back your understanding as it firms up. Propose nothing in this phase. Keep it proportionate: a small idea may need one or two exchanges, a large one several.`,
     `**2. Lock-down, one aspect at a time.** This is requirements gathering. When the scope is clear, set out the plan in your reply: the aspects to settle, in logical order (foundations first), each a likely node; small ideas may be a single aspect. That plan is the requirements list. Get the owner's OK on it. Then take the aspects in order. Where the requirement is already clear, go straight to proposing that one node, filling in minor details yourself as stated defaults. Discuss only when the requirement is unclear, or when something really needs rethinking (rare): one question at a time, then propose. Wait for the owner to lock each node in before starting the next. Start each reply in this phase with where you are, e.g. "Aspect 2 of 5: Deploy path".`,
-    `**At most one proposal per reply,** and only for an aspect that has been discussed and is solid enough to build from. Mondo shows only one card at a time. The owner locks a card in either as a draft or as approved (signed); that's their call, not yours.`,
+    `**At most one proposal per reply,** and only for an aspect that has been discussed and is solid enough to build from. Mondo shows only one card at a time. The owner decides each card: **Approve** (to be added to the game: saved, Intent signed, stage approved), **Approve as idea** (a good idea, saved but kept as an idea: not for development without further review), a **tweak** to one part (nothing saved; make exactly that change, keep the rest, and propose the corrected card), or **Skip**. That's their call, not yours. After each decision Mondo sends you a turn straight away: carry on with the next aspect without waiting to be asked.`,
     `**What a proposed node holds:** a developed design, not notes: concrete statements of how it works (rules, flows, states, numbers, limits, edge cases, connections), so the owner can point at one part and say "that's wrong". Write the Intent as one or two sentences on what it is and what it's for, then short headed sections such as "How it works", "Rules", "Numbers", "Connections" ([[links]] to other nodes), "Not in scope" and "Why". Fold in everything the owner said about this aspect, so nothing is lost; mark figures you couldn't verify as estimates. The talk itself is kept and linked from every node it shapes, as the raw notes.`,
     `Check fit as you go: make each aspect consistent with the nodes it connects to; if it changes another node, say so and make that its own aspect. Be measured: settle what matters to how it works and fits, and leave pure taste (colours, wording, tuning numbers) as a stated default. Know when to stop: once the remaining points are small, say so and wrap up.`,
-    `A proposal holds one node: its add_node (if new; list a parent before its children, across turns), its write_intent, and only the to-dos ("chase": {"node","text","due":"YYYY-MM-DD","waiting_on":"you"|"you_at_pc"|"agent"|"other"}), questions ("ask") and links ("link") that belong to it. Give it a one-line title (the node's name), "detail" (one line on why: the card shows the actions themselves) and the actions (action + its design-CLI arguments as a JSON object string, e.g. {"node":"${node?.id ?? "<id>"}","text":"..."}). Allowed actions: ${PROPOSAL_ACTIONS.join(", ")}. A new node's write_intent uses its title path as "node" (e.g. "Parent/New node"). You can't write to the bible yourself: Mondo applies a proposal only when the owner locks it in, and tells you at the start of their next message what they did with it. Don't re-propose something they skipped unless they ask; when they ask for a change, propose the corrected node.`,
+    `A proposal holds one node: its add_node (if new; list a parent before its children, across turns), its write_intent, and only the to-dos ("chase": {"node","text","due":"YYYY-MM-DD","waiting_on":"you"|"you_at_pc"|"agent"|"other"}), questions ("ask") and links ("link") that belong to it. Give it a one-line title (the node's name), "detail" (one line on why: the card shows the actions themselves) and the actions (action + its design-CLI arguments as a JSON object string, e.g. {"node":"${node?.id ?? "<id>"}","text":"..."}). Allowed actions: ${PROPOSAL_ACTIONS.join(", ")}. A new node's write_intent uses its title path as "node" (e.g. "Parent/New node"). You can't write to the bible yourself: Mondo applies a proposal only when the owner approves it (either way), and tells you at the start of the next turn what they did with it. Don't re-propose something they skipped unless they ask; when they ask for a change, propose the corrected node.`,
     `Replies: plain English, no jargon or code names, short and conversational. The design goes in the proposal, not the reply.`,
     `Anything you propose must be plain English that needs zero context, and must link other nodes it mentions with [[Title]] or [[Parent/Title|label]]. Never propose stages beyond "idea" or "proposed"; approving is the owner's.`,
     question
@@ -154,7 +162,7 @@ export function talkBrief(opts: {
     .join("\n");
 }
 
-type RawProposal = Omit<Proposal, "status" | "error">;
+type RawProposal = Omit<Proposal, "status" | "error" | "note">;
 
 /** Which node an action is about: the last part of its title path (or its id). Null when it isn't about one node. */
 function actionNode(a: TalkAction): string | null {
@@ -210,7 +218,7 @@ export function splitByNode(p: RawProposal): RawProposal[] {
 /** Parse a turn's structured result into reply + proposals. Pure. */
 export function parseTalkResult(result: Record<string, unknown> | null): {
   reply: string | null;
-  proposals: Omit<Proposal, "status" | "error">[];
+  proposals: RawProposal[];
   held: number;
   settled: boolean;
 } {
@@ -276,7 +284,7 @@ function decisionsNote(db: DB, talkId: string): string {
     : "";
   if (!proposals.length) return heldNote ? heldNote + "\n" : "";
   const decided = new Map(
-    (db.prepare("SELECT idx, status, error FROM design_talk_decisions WHERE job_id = ?").all(last.job_id) as Row[]).map((d) => [d.idx, d]),
+    (db.prepare("SELECT idx, status, error, note FROM design_talk_decisions WHERE job_id = ?").all(last.job_id) as Row[]).map((d) => [d.idx, d]),
   );
   const lines = proposals.map((p, i) => {
     const d = decided.get(i);
@@ -285,20 +293,28 @@ function decisionsNote(db: DB, talkId: string): string {
       : d.status === "failed"
         ? `the owner tried to save it, but it failed: ${d.error}`
         : d.status === "locked"
-          ? "saved and approved by the owner (Intent signed)"
-          : d.status === "approved"
-            ? "saved as a draft by the owner"
-            : "skipped by the owner";
+          ? "APPROVED by the owner: saved, Intent signed, to be added to the game"
+          : d.status === "idea"
+            ? "approved AS AN IDEA by the owner: saved and kept at stage idea (a good idea, but not for development without further review)"
+            : d.status === "revise"
+              ? `NOT saved: the owner wants a tweak: "${d.note}"`
+              : d.status === "approved"
+                ? "saved as a draft by the owner"
+                : "skipped by the owner";
     return `- "${p.title}": ${what}`;
   });
   return `${heldNote}[Mondo: your proposal from last time]\n${lines.join("\n")}\n\n`;
 }
 
-function runTurn(db: DB, project: ProjectConfig, talk: Row, text: string, first: boolean): Job {
+/**
+ * Run one turn. `text` is what the chat shows; `opts.prompt` replaces it as the instruction
+ * (for turns Mondo sends after a decision), and `opts.auto` marks such a turn.
+ */
+function runTurn(db: DB, project: ProjectConfig, talk: Row, text: string, first: boolean, opts: { prompt?: string; auto?: boolean } = {}): Job {
   const { node, question } = talkContext(db, project, talk);
   const mondoPath = mondoFolder();
   const agentName = `talk-${talk.id}`;
-  const prompt = first ? text : decisionsNote(db, talk.id) + text;
+  const prompt = first ? text : decisionsNote(db, talk.id) + (opts.prompt ?? text);
   const job = getJobs().start({
     kind: "talk",
     project: project.name,
@@ -313,7 +329,13 @@ function runTurn(db: DB, project: ProjectConfig, talk: Row, text: string, first:
     env: { MONDO_DESIGN_READONLY: "1" },
   });
   const now = Date.now();
-  db.prepare("INSERT INTO design_talk_turns (talk_id, text, job_id, created_at) VALUES (?, ?, ?, ?)").run(talk.id, text, job.id, now);
+  db.prepare("INSERT INTO design_talk_turns (talk_id, text, job_id, created_at, auto) VALUES (?, ?, ?, ?, ?)").run(
+    talk.id,
+    text,
+    job.id,
+    now,
+    opts.auto ? 1 : 0,
+  );
   db.prepare("UPDATE design_talks SET updated_at = ?, closed_at = NULL WHERE id = ?").run(now, talk.id);
   return job;
 }
@@ -385,11 +407,29 @@ export function stopTalk(db: DB, talkId: string): Talk {
 }
 
 /** Approve (apply) or skip one proposal. Applied as the owner, but only the allowed kinds of change. */
-/** The owner's decision on a card: save as a draft, save and approve (sign the Intent), or skip. */
-export type Decision = "draft" | "approve" | "skip";
+/**
+ * The owner's decision on a card:
+ *  - approve: to be added to the game (Intent signed, stage approved);
+ *  - idea: a good idea, saved but kept at stage idea (not for development without review);
+ *  - revise: not saved; the agent makes the owner's tweak and proposes the card again;
+ *  - skip: dropped. ("draft" is kept for older pages.)
+ * Every decision except a failed save starts the agent's next turn straight away.
+ */
+export type Decision = "approve" | "idea" | "revise" | "skip" | "draft";
 
-export function decide(db: DB, project: ProjectConfig, talkId: string, jobId: string, idx: number, decision: Decision): Talk {
+export function decide(
+  db: DB,
+  project: ProjectConfig,
+  talkId: string,
+  jobId: string,
+  idx: number,
+  decision: Decision,
+  note?: string,
+): Talk {
   const talk = talkRow(db, talkId);
+  const tweak = (note ?? "").trim().slice(0, 5000);
+  if (decision === "revise" && !tweak) throw new DesignError("say what to change first");
+  if (getTalk(db, talkId).turns.some((t) => t.status === "thinking")) throw new DesignError("the agent is still thinking", 409);
   const turn = db.prepare("SELECT 1 FROM design_talk_turns WHERE talk_id = ? AND job_id = ?").get(talkId, jobId);
   if (!turn) throw new DesignError("no such reply in this talk", 404);
   const p = parseTalkResult(getJobs().get(jobId)?.result ?? null).proposals[idx];
@@ -397,26 +437,44 @@ export function decide(db: DB, project: ProjectConfig, talkId: string, jobId: st
   if (db.prepare("SELECT 1 FROM design_talk_decisions WHERE job_id = ? AND idx = ?").get(jobId, idx)) {
     throw new DesignError("already decided");
   }
-  let status: "approved" | "locked" | "skipped" | "failed" =
-    decision === "skip" ? "skipped" : decision === "approve" ? "locked" : "approved";
+  let status: Proposal["status"] =
+    decision === "skip"
+      ? "skipped"
+      : decision === "approve"
+        ? "locked"
+        : decision === "idea"
+          ? "idea"
+          : decision === "revise"
+            ? "revise"
+            : "approved";
   let error: string | null = null;
-  if (decision !== "skip") {
+  if (decision === "approve" || decision === "idea" || decision === "draft") {
     try {
-      applyProposal(db, project, talk, p.actions, { approve: decision === "approve" });
+      applyProposal(db, project, talk, p.actions, { approve: decision === "approve", idea: decision === "idea" });
     } catch (e) {
       status = "failed";
       error = (e as Error).message;
     }
   }
-  db.prepare("INSERT INTO design_talk_decisions (job_id, idx, talk_id, status, error, decided_at) VALUES (?, ?, ?, ?, ?, ?)").run(
-    jobId,
-    idx,
-    talkId,
-    status,
-    error,
-    Date.now(),
-  );
+  db.prepare(
+    "INSERT INTO design_talk_decisions (job_id, idx, talk_id, status, error, decided_at, note) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  ).run(jobId, idx, talkId, status, error, Date.now(), decision === "revise" ? tweak : null);
   db.prepare("UPDATE design_talks SET updated_at = ? WHERE id = ?").run(Date.now(), talkId);
+
+  // Carry on without the owner having to say "next".
+  if (status !== "failed") {
+    if (status === "revise") {
+      runTurn(db, project, talk, `Tweak to "${p.title}": ${tweak}`, false, {
+        prompt: "Make that tweak to the card, keep everything else as it was, and propose the corrected card.",
+      });
+    } else {
+      const label = status === "locked" ? `Approved "${p.title}"` : status === "idea" ? `Approved "${p.title}" as an idea` : status === "skipped" ? `Skipped "${p.title}"` : `Saved "${p.title}" as a draft`;
+      runTurn(db, project, talk, label, false, {
+        auto: true,
+        prompt: "Carry on: move to the next aspect in the plan, or wrap up briefly if that was the last one.",
+      });
+    }
+  }
   return getTalk(db, talkId);
 }
 
@@ -426,11 +484,11 @@ export function applyProposal(
   project: ProjectConfig,
   talk: { id?: string; node_id: string | null },
   actions: TalkAction[],
-  opts: { approve?: boolean } = {},
+  opts: { approve?: boolean; idea?: boolean } = {},
 ) {
   if (!actions.length) throw new DesignError("this proposal has nothing to apply");
   if (opts.approve && !actions.some((a) => a.action === "write_intent")) {
-    throw new DesignError("there's no Intent in this card to approve; save it as a draft instead");
+    throw new DesignError("there's no Intent in this card to approve; approve it as an idea instead");
   }
   for (const a of actions) {
     if (!(PROPOSAL_ACTIONS as readonly string[]).includes(a.action)) throw new DesignError(`a talk can't "${a.action}"`, 403);
@@ -445,27 +503,37 @@ export function applyProposal(
       }
       runAction(db, project.name, { ...args, action: a.action }, HUMAN);
     }
-    if (talk.id) linkTalk(db, project, talk.id, actions);
-    // Approved: the owner signs the Intent just written and moves the node to "approved" (canon).
-    if (opts.approve) {
-      for (const a of actions) {
-        if (a.action !== "write_intent") continue;
-        const ref = typeof a.args.node === "string" ? a.args.node : talk.node_id;
-        const n = ref ? resolveNode(db, project.name, ref) : null;
-        if (!n) continue;
-        signIntent(db, n.id, HUMAN);
-        if (!["approved", "in_build", "built"].includes(getNodeDetail(db, n.id).node.stage)) setStage(db, n.id, "approved", HUMAN);
+    const touched = touchedNodes(db, project, talk, actions);
+    // The talk is the notes behind every node it shaped.
+    if (talk.id) {
+      const ref = "/design/talk/" + talk.id;
+      for (const id of touched) {
+        if (db.prepare("SELECT 1 FROM design_sources WHERE node_id = ? AND ref = ?").get(id, ref)) continue;
+        addSource(db, id, { ref, title: "Design talk (the notes behind this)" }, HUMAN);
+      }
+    }
+    for (const id of touched) {
+      const stage = getNodeDetail(db, id).node.stage;
+      if (opts.approve) {
+        // Approved: to be added to the game. The owner signs the Intent and the node moves to "approved".
+        if (!actions.some((a) => a.action === "write_intent" && nodeRef(a, talk) && resolveNode(db, project.name, nodeRef(a, talk)!)?.id === id)) continue;
+        signIntent(db, id, HUMAN);
+        if (!["approved", "in_build", "built"].includes(stage)) setStage(db, id, "approved", HUMAN);
+      } else if (opts.idea && stage === "proposed") {
+        // Approved as an idea: kept as an idea, not for development without further review.
+        setStage(db, id, "idea", HUMAN);
       }
     }
   });
 }
 
-/** Link the talk (the raw notes) from every node a proposal created or rewrote, once per node. */
-function linkTalk(db: DB, project: ProjectConfig, talkId: string, actions: TalkAction[]) {
-  const ref = `/design/talk/${talkId}`;
+const nodeRef = (a: TalkAction, talk: { node_id: string | null }) => (typeof a.args.node === "string" ? a.args.node : talk.node_id);
+
+/** The nodes a proposal created or rewrote (its new nodes and Intents), by id. */
+function touchedNodes(db: DB, project: ProjectConfig, talk: { node_id: string | null }, actions: TalkAction[]): string[] {
   const str = (a: TalkAction, k: string) => (typeof a.args[k] === "string" ? (a.args[k] as string) : "");
   const refs = actions.flatMap((a) => {
-    if (a.action === "write_intent") return [str(a, "node")];
+    if (a.action === "write_intent") return [nodeRef(a, talk) ?? ""];
     if (a.action === "ensure") return [str(a, "path")];
     if (a.action === "add_node") {
       const parent = str(a, "parent");
@@ -476,30 +544,32 @@ function linkTalk(db: DB, project: ProjectConfig, talkId: string, actions: TalkA
     }
     return [];
   });
-  for (const r of new Set(refs.filter(Boolean))) {
-    const n = resolveNode(db, project.name, r);
-    if (!n || db.prepare("SELECT 1 FROM design_sources WHERE node_id = ? AND ref = ?").get(n.id, ref)) continue;
-    addSource(db, n.id, { ref, title: "Design talk (the notes behind this)" }, HUMAN);
+  const ids = new Set<string>();
+  for (const r of refs) {
+    const n = r ? resolveNode(db, project.name, r) : null;
+    if (n) ids.add(n.id);
   }
+  return [...ids];
 }
 
 function turnView(db: DB, r: Row): TalkTurn {
   const job = r.job_id ? getJobs().get(r.job_id) : null;
   const parsed = parseTalkResult(job?.result ?? null);
   const decided = new Map(
-    (db.prepare("SELECT idx, status, error FROM design_talk_decisions WHERE job_id = ?").all(r.job_id ?? "") as Row[]).map((d) => [d.idx, d]),
+    (db.prepare("SELECT idx, status, error, note FROM design_talk_decisions WHERE job_id = ?").all(r.job_id ?? "") as Row[]).map((d) => [d.idx, d]),
   );
   const status: TalkTurn["status"] = !job ? "failed" : job.status === "running" ? "thinking" : job.status === "done" ? "done" : job.status;
   return {
     id: r.id,
     text: r.text,
+    auto: !!r.auto,
     createdAt: r.created_at,
     jobId: r.job_id,
     status,
     progress: job?.status === "running" ? job.progress : null,
     reply: parsed.reply ?? (job?.status === "done" ? job.summary : null),
     held: parsed.held,
-    proposals: parsed.proposals.map((p, i) => ({ ...p, status: decided.get(i)?.status ?? "pending", error: decided.get(i)?.error ?? null })),
+    proposals: parsed.proposals.map((p, i) => ({ ...p, status: decided.get(i)?.status ?? "pending", error: decided.get(i)?.error ?? null, note: decided.get(i)?.note ?? null })),
     settled: parsed.settled,
     error: job?.error ?? (job ? null : "This reply's record is missing."),
     tokens: job && job.status !== "running" ? (job.inputTokens ?? 0) + (job.outputTokens ?? 0) + (job.cacheWriteTokens ?? 0) : null,

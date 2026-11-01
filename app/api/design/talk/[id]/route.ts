@@ -25,8 +25,9 @@ export async function GET(_req: Request, { params }: Ctx) {
 }
 
 /**
- * { action: "say", text } | { action: "decide", jobId, index, decision: "draft" | "approve" | "skip" } | { action: "stop" }.
- * Draft applies the proposal as the owner; approve also signs its Intent and moves the node to approved.
+ * { action: "say", text } | { action: "decide", jobId, index, decision: "approve" | "idea" | "revise" | "skip", note? } | { action: "stop" }.
+ * Approve saves it as the owner, signs its Intent and moves the node to approved; idea saves it and keeps
+ * it an idea; revise sends the owner's tweak (note) back to the agent. Each starts the agent's next turn.
  */
 export async function POST(req: Request, { params }: Ctx) {
   if (isCrossSite(req)) return forbidden();
@@ -48,8 +49,9 @@ export async function POST(req: Request, { params }: Ctx) {
         if (typeof b.jobId !== "string" || typeof b.index !== "number") return Response.json({ error: "jobId and index required" }, { status: 400 });
         {
           // decision: "draft" | "approve" | "skip" (older pages send approve: true/false).
-          const d = b.decision === "approve" || b.decision === "draft" || b.decision === "skip" ? b.decision : b.approve === true ? "draft" : "skip";
-          return Response.json({ talk: decide(db, project, id, b.jobId, b.index, d) });
+          const known = ["approve", "idea", "revise", "skip", "draft"] as const;
+          const d = known.find((k) => k === b.decision) ?? (b.approve === true ? "draft" : "skip");
+          return Response.json({ talk: decide(db, project, id, b.jobId, b.index, d, typeof b.note === "string" ? b.note : undefined) });
         }
       case "stop":
         return Response.json({ talk: stopTalk(db, id) });

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowLeft, Check, Loader2, MessagesSquare, PenLine, Send, Square, X } from "lucide-react";
+import { ArrowLeft, Check, Lightbulb, Loader2, MessagesSquare, PenLine, Send, Square, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { fmtDuration, fmtTokens } from "@/components/usage-ui";
 import { Button } from "@/components/ui/button";
@@ -109,10 +109,14 @@ function ActionView({ a, tree, slug }: { a: TalkAction; tree: LinkableNode[]; sl
   );
 }
 
+type CardDecision = "approve" | "idea" | "revise" | "skip";
+
 const PROPOSAL_STATE: Record<Proposal["status"], { label: string; cls: string }> = {
   pending: { label: "Waiting for you", cls: "border-leeloo/60" },
+  locked: { label: "Approved: to be added to the game", cls: "border-earth opacity-90" },
+  idea: { label: "Approved as an idea", cls: "border-air/60 opacity-90" },
+  revise: { label: "Tweak sent: revised card below", cls: "border-border opacity-60" },
   approved: { label: "Saved as a draft", cls: "border-earth/50 opacity-80" },
-  locked: { label: "Saved and approved", cls: "border-earth opacity-90" },
   skipped: { label: "Skipped", cls: "border-border opacity-60" },
   failed: { label: "Couldn't save", cls: "border-taxi/60" },
 };
@@ -120,20 +124,18 @@ const PROPOSAL_STATE: Record<Proposal["status"], { label: string; cls: string }>
 function ProposalCard({
   p,
   onDecide,
-  onChange,
   busy,
   tree,
   slug,
 }: {
   p: Proposal;
-  onDecide: (decision: "draft" | "approve" | "skip") => void;
-  /** Start a reply about this part ("that's wrong because ..."). */
-  onChange: () => void;
+  onDecide: (decision: CardDecision, note?: string) => Promise<boolean>;
   busy: boolean;
   tree: LinkableNode[];
   slug: string | null;
 }) {
   const s = PROPOSAL_STATE[p.status];
+  const [tweak, setTweak] = useState("");
   return (
     <div className={cn("space-y-2 rounded-lg border-2 bg-card/60 p-3", s.cls)}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -146,27 +148,41 @@ function ProposalCard({
           <ActionView key={i} a={a} tree={tree} slug={slug} />
         ))}
       </div>
+      {p.note && <p className="text-sm italic text-muted-foreground">Your tweak: {p.note}</p>}
       {p.error && <p className="text-xs text-taxi">{p.error}</p>}
       {p.status === "pending" && (
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" disabled={busy} onClick={() => onDecide("approve")} title="Save it and sign the Intent: this is how it should be">
-            <Check /> Approve
-          </Button>
-          <Button size="sm" variant="secondary" disabled={busy} onClick={() => onDecide("draft")} title="Save it, but leave the Intent unsigned">
-            Save as draft
-          </Button>
-          <Button size="sm" variant="outline" disabled={busy} onClick={onChange}>
-            <PenLine /> Change this
-          </Button>
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => onDecide("skip")}>
-            <X /> Skip
-          </Button>
+        <div className="space-y-2 border-t border-border/60 pt-2">
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" disabled={busy} onClick={() => onDecide("approve")} title="To be added to the game: saves it and signs the Intent">
+              <Check /> Approve
+            </Button>
+            <Button size="sm" variant="secondary" disabled={busy} onClick={() => onDecide("idea")} title="A good idea, but not for development without further review: saved, kept as an idea">
+              <Lightbulb /> Approve as idea
+            </Button>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => onDecide("skip")}>
+              <X /> Skip
+            </Button>
+          </div>
+          <div className="flex items-end gap-2">
+            <textarea
+              rows={1}
+              value={tweak}
+              onChange={(e) => setTweak(e.target.value)}
+              placeholder="Tweak one bit? e.g. make the cap 20 players"
+              className="min-h-9 flex-1 resize-y rounded-md border border-input bg-transparent px-2.5 py-1.5 text-base outline-none focus-visible:border-ring md:text-sm dark:bg-input/30"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || !tweak.trim()}
+              onClick={async () => {
+                if (await onDecide("revise", tweak)) setTweak("");
+              }}
+            >
+              <PenLine /> Revise
+            </Button>
+          </div>
         </div>
-      )}
-      {p.status !== "pending" && (
-        <button type="button" className="readout normal-case hover:text-leeloo" onClick={onChange}>
-          Change this
-        </button>
       )}
     </div>
   );
@@ -179,21 +195,24 @@ function Turn({
   slug,
   busy,
   decide,
-  change,
 }: {
-  change: (title: string) => void;
   t: TalkTurn;
   first: boolean;
   tree: LinkableNode[];
   slug: string | null;
   busy: boolean;
-  decide: (jobId: string, index: number, decision: "draft" | "approve" | "skip") => void;
+  decide: (jobId: string, index: number, decision: CardDecision, note?: string) => Promise<boolean>;
 }) {
   return (
     <div className="space-y-3">
-      {!first && (
-        <div className="ml-auto max-w-[85%] whitespace-pre-wrap rounded-lg bg-leeloo/15 px-3 py-2 text-sm">{t.text}</div>
-      )}
+      {!first &&
+        (t.auto ? (
+          <div className="flex justify-center">
+            <span className="readout rounded-full border border-brass/40 px-3 py-1 normal-case">{t.text}</span>
+          </div>
+        ) : (
+          <div className="ml-auto max-w-[85%] whitespace-pre-wrap rounded-lg bg-leeloo/15 px-3 py-2 text-sm">{t.text}</div>
+        ))}
       {t.status === "thinking" && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin text-fire" />
@@ -211,7 +230,14 @@ function Turn({
         </Card>
       )}
       {t.proposals.map((p, i) => (
-        <ProposalCard key={i} p={p} busy={busy} tree={tree} slug={slug} onDecide={(decision) => t.jobId && decide(t.jobId, i, decision)} onChange={() => change(p.title)} />
+        <ProposalCard
+          key={i}
+          p={p}
+          busy={busy}
+          tree={tree}
+          slug={slug}
+          onDecide={(decision, note) => (t.jobId ? decide(t.jobId, i, decision, note) : Promise.resolve(false))}
+        />
       ))}
       {t.status !== "thinking" && t.error && (
         <p className="whitespace-pre-wrap rounded-md border border-taxi/40 bg-taxi/10 px-3 py-2 text-sm text-taxi">{t.error}</p>
@@ -231,10 +257,6 @@ export default function TalkView({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
-  const change = (title: string) => {
-    setText((t) => (t.trim() ? t + "\n\n" : "") + `About "${title}": `);
-    setTimeout(() => input.current?.focus(), 0);
-  };
   const lastCount = useRef(0);
 
   const load = useCallback(async () => {
@@ -354,8 +376,7 @@ export default function TalkView({ id }: { id: string }) {
                 tree={tree}
                 slug={slug}
                 busy={busy}
-                decide={(jobId, index, decision) => post({ action: "decide", jobId, index, decision })}
-                change={change}
+                decide={(jobId, index, decision, note) => post({ action: "decide", jobId, index, decision, note })}
               />
             ))}
             {settled && !thinking && (
