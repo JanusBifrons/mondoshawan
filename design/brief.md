@@ -1,7 +1,7 @@
 # Mondoshawan — design brief
 
 ## Purpose
-Mondoshawan ("Mondo") is a Windows desktop app that monitors the Claude Code sessions running on this machine. Later it will also help manage game design and roadmaps across projects (EQX-Net first).
+Mondoshawan ("Mondo") is a Windows desktop app that monitors the Claude Code sessions running on this machine. It is also the living **design bible** for each project (EQX-Net first): a versioned tree of design nodes running from what the game does today (written by agents from the code), through approved work in progress, up to ideas. It shows what is designed, what is built, and where the two differ. See the "Design bible" section in `CLAUDE.md`.
 
 ## How the owner works
 - Windows with Git Bash. Each agent is started by hand: `cd` into a project folder (often a git worktree), then `claude`.

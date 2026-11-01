@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { DatabaseSync as DatabaseSyncType } from "node:sqlite";
 import { dataDir } from "./config";
-import { MIGRATIONS } from "./schema";
+import { DESIGN_SCHEMA, MIGRATIONS } from "./schema";
 
 /**
  * Mondo's local database: SQLite via Node's built-in `node:sqlite` (no native module,
@@ -34,6 +34,7 @@ export function migrate(db: DB): number {
       throw new Error(`[mondo] migration ${v + 1} failed: ${(err as Error).message}`);
     }
   }
+  db.exec(DESIGN_SCHEMA);
   return MIGRATIONS.length;
 }
 
