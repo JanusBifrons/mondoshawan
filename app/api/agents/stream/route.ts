@@ -1,15 +1,17 @@
+import { agentViews } from "@/lib/agent-views";
 import { getAgents } from "@/lib/agents";
 import { sseResponse } from "@/lib/sse";
+import { getStore } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-/** Pushes the agent list on every change (event "agents"). */
+/** Pushes the agent list (with live session status from the hooks) on every change. */
 export function GET(req: Request) {
   const agents = getAgents();
+  const store = getStore();
   return sseResponse(req, (send) => {
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const snapshot = () => send("agents", { agents: agents.list(), now: Date.now() });
-    // Entries arrive in bursts; coalesce list refreshes.
+    const snapshot = () => send("agents", { agents: agentViews(), now: Date.now() });
     const soon = () => {
       if (timer) return;
       timer = setTimeout(() => {
@@ -19,11 +21,11 @@ export function GET(req: Request) {
     };
     snapshot();
     agents.on("change", soon);
-    agents.on("entry", soon);
+    store.on("change", soon);
     return () => {
       if (timer) clearTimeout(timer);
       agents.off("change", soon);
-      agents.off("entry", soon);
+      store.off("change", soon);
     };
   });
 }

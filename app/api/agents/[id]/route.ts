@@ -1,3 +1,4 @@
+import { agentView } from "@/lib/agent-views";
 import { getAgents } from "@/lib/agents";
 import { forbidden, isCrossSite } from "@/lib/guard";
 
@@ -7,47 +8,27 @@ type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(_req: Request, { params }: Ctx) {
   const { id } = await params;
-  const agents = getAgents();
-  const agent = agents.get(id);
-  if (!agent) return Response.json({ error: "not found" }, { status: 404 });
-  return Response.json({ agent, entries: agents.entries(id), now: Date.now() });
+  const agent = agentView(id);
+  return agent ? Response.json({ agent, now: Date.now() }) : Response.json({ error: "not found" }, { status: 404 });
 }
 
-/** Actions: { action: "send", text } | "interrupt" | "stop" | "resume". */
+/** Actions: { action: "stop" | "resume" }. Chatting happens in the Claude app. */
 export async function POST(req: Request, { params }: Ctx) {
   if (isCrossSite(req)) return forbidden();
   const { id } = await params;
   const agents = getAgents();
   if (!agents.get(id)) return Response.json({ error: "not found" }, { status: 404 });
-  let b: { action?: unknown; text?: unknown };
+  let b: { action?: unknown };
   try {
     b = await req.json();
   } catch {
     return Response.json({ error: "invalid JSON" }, { status: 400 });
   }
   let ok = false;
-  switch (b.action) {
-    case "send": {
-      const text = typeof b.text === "string" ? b.text.trim().slice(0, 20_000) : "";
-      if (!text) return Response.json({ error: "text is required" }, { status: 400 });
-      ok = agents.send(id, text);
-      break;
-    }
-    case "interrupt":
-      ok = agents.interrupt(id);
-      break;
-    case "stop":
-      ok = agents.stop(id);
-      break;
-    case "resume":
-      ok = !!agents.resume(id);
-      break;
-    default:
-      return Response.json({ error: "unknown action" }, { status: 400 });
-  }
-  return ok
-    ? Response.json(agents.get(id))
-    : Response.json({ error: "agent is not running" }, { status: 409 });
+  if (b.action === "stop") ok = agents.stop(id);
+  else if (b.action === "resume") ok = !!agents.resume(id);
+  else return Response.json({ error: "unknown action" }, { status: 400 });
+  return ok ? Response.json(agentView(id)) : Response.json({ error: "not possible right now" }, { status: 409 });
 }
 
 /** Forget a stopped agent (its Claude conversation and worktree are kept). */

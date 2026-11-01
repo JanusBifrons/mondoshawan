@@ -14,12 +14,10 @@ const TABS = [
 
 /**
  * Phone tab bar (below md). The sidebar is still there behind the menu button, but a
- * bottom bar is what people expect on a phone. Hidden in an agent's chat view, which
- * has its own back button and a composer pinned to the bottom.
+ * bottom bar is what people expect on a phone.
  */
 export function MobileNav() {
   const pathname = usePathname();
-  if (/^\/agents\/[^/]+/.test(pathname)) return null;
   return (
     <>
       {/* Spacer so page content isn't hidden behind the fixed bar. */}

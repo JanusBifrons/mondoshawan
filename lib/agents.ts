@@ -1,21 +1,23 @@
-import { spawn, execFile, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import crypto from "node:crypto";
 import { EventEmitter } from "node:events";
-import readline from "node:readline";
+import fs from "node:fs";
+import path from "node:path";
+import { dataDir } from "./config";
 import { getDb, type DB } from "./db";
-import { parseEvent, type EntryKind } from "./agent-events";
 
 /**
- * Agents are Claude Code sessions that Mondo runs itself, so they can be driven from
- * the phone. Each is a headless `claude -p` process speaking stream-json on stdin/stdout:
- * we write user messages (and interrupt requests) in, and read events out.
- *
- * Processes are children of the Mondo server. If the server stops, they stop too; their
- * conversation is kept by Claude Code, so "Resume" starts a new process with --resume.
+ * Agents are Claude Code sessions that Mondo starts. Each one is an ordinary interactive
+ * `claude --remote-control` running in its own Git Bash (mintty) window on the PC:
+ *   - you can see it, type in it, and closing the window ends it;
+ *   - it shows up in the Claude app (phone/desktop) under Remote Control, where you chat
+ *     with it and answer its permission prompts;
+ *   - Mondo's hooks report its status (we pass --session-id, so hook rows match the agent).
+ * Mondo records the claude.exe PID so it can stop it and notice when it has gone.
+ * Agents are detached: they keep running if Mondo restarts.
  */
 
-export type AgentStatus = "starting" | "working" | "idle" | "stopping" | "stopped" | "failed";
-export const RUNNING: AgentStatus[] = ["starting", "working", "idle", "stopping"];
+export type AgentStatus = "starting" | "running" | "stopped" | "failed";
 
 export const PERMISSION_MODES = ["auto", "acceptEdits", "plan", "manual"] as const;
 export type PermissionMode = (typeof PERMISSION_MODES)[number];
@@ -25,7 +27,9 @@ export interface Agent {
   id: string;
   name: string;
   project: string;
+  /** Folder Claude was started in (the project or one of its worktrees). */
   cwd: string;
+  /** Worktree the agent was told to create and move into, if any. */
   worktreeName: string | null;
   model: string | null;
   permissionMode: PermissionMode;
@@ -33,24 +37,14 @@ export interface Agent {
   status: AgentStatus;
   createdAt: number;
   lastActivity: number;
-  costUsd: number;
   exitInfo: string | null;
-}
-
-export interface Entry {
-  id: number;
-  agentId: string;
-  at: number;
-  kind: EntryKind;
-  text: string;
+  pid: number | null;
 }
 
 export interface SpawnOptions {
   name: string;
   project: string;
-  /** Folder to start in (the project or one of its worktrees). */
   cwd: string;
-  /** Create a new git worktree with this name (claude --worktree). */
   worktreeName?: string | null;
   model?: string | null;
   permissionMode: PermissionMode;
@@ -69,8 +63,8 @@ interface Row {
   status: string;
   created_at: number;
   last_activity: number;
-  cost_usd: number;
   exit_info: string | null;
+  pid: number | null;
 }
 
 const fromRow = (r: Row): Agent => ({
@@ -82,40 +76,93 @@ const fromRow = (r: Row): Agent => ({
   model: r.model,
   permissionMode: r.permission_mode as PermissionMode,
   sessionId: r.session_id,
-  status: r.status as AgentStatus,
+  status: (["starting", "running", "stopped", "failed"].includes(r.status) ? r.status : "stopped") as AgentStatus,
   createdAt: r.created_at,
   lastActivity: r.last_activity,
-  costUsd: r.cost_usd,
   exitInfo: r.exit_info,
+  pid: r.pid,
 });
 
-/** The `claude` executable; override with MONDO_CLAUDE. */
-const claudeBin = () => process.env.MONDO_CLAUDE || "claude";
+/** Git Bash's terminal. Override with MONDO_MINTTY. */
+export const minttyPath = () => process.env.MONDO_MINTTY || "C:/Program Files/Git/usr/bin/mintty.exe";
 
-function killTree(pid: number) {
-  if (process.platform === "win32") {
-    execFile("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true }, () => {});
-  } else {
-    try {
-      process.kill(pid, "SIGTERM");
-    } catch {
-      /* gone */
-    }
+/** Quote for bash, single-quote style. */
+export const bashQuote = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
+
+/** C:\a\b or C:/a/b -> /c/a/b (Git Bash path). */
+export const toBashPath = (p: string) => p.replace(/\\/g, "/").replace(/^([A-Za-z]):/, (_, d: string) => "/" + d.toLowerCase());
+
+/** Extra system prompt telling the agent how to work. */
+export function agentInstructions(a: Pick<Agent, "name" | "project" | "worktreeName">): string {
+  const lines = [`You were started by Mondo as the agent "${a.name}" for ${a.project}. The user talks to you through the Claude app (Remote Control).`];
+  if (a.worktreeName) {
+    lines.push(
+      `Before doing anything else, call the EnterWorktree tool with name "${a.worktreeName}" and do all your work inside that worktree.`,
+      `When your work is ready, commit it, push the branch, and open a pull request into main with \`gh pr create\`.`,
+    );
+  }
+  return lines.join(" ");
+}
+
+/** The claude command line for an agent (also used to resume one). */
+export function claudeArgs(a: Agent, opts: { prompt?: string; resume?: boolean }): string[] {
+  const title = `${a.project}: ${a.name}`;
+  return [
+    "--remote-control", title,
+    "--name", title,
+    ...(opts.resume ? ["--resume", a.sessionId] : ["--session-id", a.sessionId]),
+    "--permission-mode", a.permissionMode,
+    ...(a.model ? ["--model", a.model] : []),
+    "--append-system-prompt", agentInstructions(a),
+    ...(opts.prompt?.trim() ? [opts.prompt.trim()] : []),
+  ];
+}
+
+/** The script the Git Bash window runs. `exec` so the window closes when Claude exits. */
+export function launchScript(cwd: string, args: string[]): string {
+  return [
+    `cd ${bashQuote(toBashPath(cwd))} || { echo "Mondo: folder not found"; sleep 30; exit 1; }`,
+    `exec claude ${args.map(bashQuote).join(" ")}`,
+    "",
+  ].join("\n");
+}
+
+function isAlive(pid: number | null): boolean {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "EPERM";
   }
 }
 
+/** Find the claude.exe started with this session id (its PID isn't returned by mintty). */
+function findClaudePid(sessionId: string): Promise<number | null> {
+  const ps = `Get-CimInstance Win32_Process -Filter "Name='claude.exe'" | Where-Object { $_.CommandLine -like '*${sessionId}*' } | Select-Object -First 1 -ExpandProperty ProcessId`;
+  return new Promise((resolve) => {
+    execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps], { windowsHide: true, timeout: 15000 }, (err, out) => {
+      const pid = Number(String(out ?? "").trim());
+      resolve(!err && pid > 0 ? pid : null);
+    });
+  });
+}
+
+function killTree(pid: number) {
+  execFile("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true }, () => {});
+}
+
+/** How long a new agent may take to report in through the hooks before we flag it. */
+const START_GRACE_MS = 60_000;
+
 export class AgentManager extends EventEmitter {
-  private procs = new Map<string, ChildProcessWithoutNullStreams>();
-  private stderr = new Map<string, string[]>();
+  private timer: ReturnType<typeof setInterval>;
 
   constructor(private db: DB) {
     super();
     this.setMaxListeners(200);
-    // Any agent marked running belongs to a server that no longer exists.
-    db.prepare(
-      `UPDATE agents SET status = 'stopped', exit_info = COALESCE(exit_info, 'Mondo restarted')
-       WHERE status IN ('starting','working','idle','stopping')`,
-    ).run();
+    this.timer = setInterval(() => this.check(), 5000);
+    this.timer.unref();
   }
 
   list(): Agent[] {
@@ -125,20 +172,6 @@ export class AgentManager extends EventEmitter {
   get(id: string): Agent | null {
     const r = this.db.prepare("SELECT * FROM agents WHERE id = ?").get(id) as Row | undefined;
     return r ? fromRow(r) : null;
-  }
-
-  entries(id: string, afterId = 0, limit = 500): Entry[] {
-    const rows = this.db
-      .prepare(
-        `SELECT * FROM (SELECT id, agent_id, at, kind, text FROM agent_entries
-           WHERE agent_id = ? AND id > ? ORDER BY id DESC LIMIT ?) ORDER BY id`,
-      )
-      .all(id, afterId, limit) as { id: number; agent_id: string; at: number; kind: string; text: string }[];
-    return rows.map((r) => ({ id: r.id, agentId: r.agent_id, at: r.at, kind: r.kind as EntryKind, text: r.text }));
-  }
-
-  isRunning(id: string) {
-    return this.procs.has(id);
   }
 
   spawn(opts: SpawnOptions): Agent {
@@ -155,155 +188,111 @@ export class AgentManager extends EventEmitter {
       status: "starting",
       createdAt: now,
       lastActivity: now,
-      costUsd: 0,
       exitInfo: null,
+      pid: null,
     };
     this.db
       .prepare(
         `INSERT INTO agents (id, name, project, cwd, worktree_name, model, permission_mode, session_id,
-                             status, created_at, last_activity, cost_usd, exit_info)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)`,
+                             status, created_at, last_activity, cost_usd, exit_info, pid)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'starting', ?, ?, 0, NULL, NULL)`,
       )
       .run(agent.id, agent.name, agent.project, agent.cwd, agent.worktreeName, agent.model,
-        agent.permissionMode, agent.sessionId, agent.status, now, now);
-
-    const where = agent.worktreeName ? `new worktree "${agent.worktreeName}" of ${agent.cwd}` : agent.cwd;
-    this.addEntry(agent.id, "system", `Starting in ${where} (${agent.permissionMode} mode)`);
-    this.launch(agent, ["--session-id", agent.sessionId, ...(agent.worktreeName ? ["--worktree", agent.worktreeName] : [])]);
-    if (opts.prompt?.trim()) this.send(agent.id, opts.prompt);
+        agent.permissionMode, agent.sessionId, now, now);
+    this.launch(agent, claudeArgs(agent, { prompt: opts.prompt }));
     return this.get(agent.id)!;
   }
 
-  /** Start a stopped agent again, continuing its conversation. */
+  /** Open a stopped agent again in a new window, continuing its conversation. */
   resume(id: string): Agent | null {
     const agent = this.get(id);
-    if (!agent || this.procs.has(id)) return agent;
-    this.update(id, { status: "starting", exit_info: null });
-    this.addEntry(id, "system", "Resuming");
-    // agent.cwd is the folder Claude reported at start (the worktree, if one was made).
-    this.launch(agent, ["--resume", agent.sessionId]);
+    if (!agent || agent.status === "starting" || agent.status === "running") return agent;
+    this.update(id, { status: "starting", exit_info: null, pid: null, created_at: Date.now() });
+    this.launch(agent, claudeArgs(agent, { resume: true }));
     return this.get(id);
   }
 
-  send(id: string, text: string): boolean {
-    const p = this.procs.get(id);
-    if (!p || !p.stdin.writable) return false;
-    p.stdin.write(JSON.stringify({ type: "user", message: { role: "user", content: text } }) + "\n");
-    this.addEntry(id, "user", text);
-    this.update(id, { status: "working" });
-    return true;
-  }
-
-  interrupt(id: string): boolean {
-    const p = this.procs.get(id);
-    if (!p || !p.stdin.writable) return false;
-    const req = { type: "control_request", request_id: crypto.randomUUID(), request: { subtype: "interrupt" } };
-    p.stdin.write(JSON.stringify(req) + "\n");
-    return true;
-  }
-
-  /** Interrupt, close input so Claude exits, and force-kill if it hasn't within 5s. */
+  /** Close the agent's window (kills claude and anything it started). */
   stop(id: string): boolean {
-    const p = this.procs.get(id);
-    if (!p) return false;
-    this.update(id, { status: "stopping" });
-    this.interrupt(id);
-    p.stdin.end();
-    const pid = p.pid;
-    setTimeout(() => {
-      if (this.procs.get(id) === p && pid) killTree(pid);
-    }, 5000).unref();
+    const agent = this.get(id);
+    if (!agent || !isAlive(agent.pid)) return false;
+    killTree(agent.pid!);
+    this.update(id, { status: "stopped", exit_info: "Stopped from Mondo" });
     return true;
   }
 
-  /** Forget a stopped agent and its transcript. The Claude conversation and any worktree stay. */
+  /** Forget a stopped agent. Its Claude conversation and any worktree stay. */
   remove(id: string): boolean {
-    if (this.procs.has(id)) return false;
-    const n = this.db.prepare("DELETE FROM agents WHERE id = ?").run(id).changes;
-    if (n) this.emit("change", { agentId: id, removed: true });
-    return n > 0;
+    const agent = this.get(id);
+    if (!agent || isAlive(agent.pid)) return false;
+    this.db.prepare("DELETE FROM agents WHERE id = ?").run(id);
+    this.emit("change", { agentId: id, removed: true });
+    return true;
   }
 
-  private launch(agent: Agent, extra: string[]) {
-    const args = [
-      "-p",
-      "--input-format", "stream-json",
-      "--output-format", "stream-json",
-      "--verbose",
-      "--permission-mode", agent.permissionMode,
-      // No one is at a terminal to answer prompts: anything that would ask is denied.
-      "--permission-prompts", "none",
-      "--name", `Mondo: ${agent.name}`,
-      ...(agent.model ? ["--model", agent.model] : []),
-      ...extra,
-    ];
-    let proc: ChildProcessWithoutNullStreams;
-    try {
-      proc = spawn(claudeBin(), args, {
-        cwd: agent.cwd,
-        windowsHide: true,
-        env: { ...process.env, MONDO_AGENT_ID: agent.id },
-      });
-    } catch (err) {
-      this.finish(agent.id, "failed", `Could not start claude: ${(err as Error).message}`);
+  private launch(agent: Agent, args: string[]) {
+    const dir = path.join(dataDir(), "agents");
+    fs.mkdirSync(dir, { recursive: true });
+    const script = path.join(dir, `${agent.id}.sh`);
+    fs.writeFileSync(script, launchScript(agent.cwd, args));
+
+    const mintty = minttyPath();
+    if (!fs.existsSync(mintty)) {
+      this.update(agent.id, { status: "failed", exit_info: `Git Bash not found at ${mintty}` });
       return;
     }
-    this.procs.set(agent.id, proc);
-    this.stderr.set(agent.id, []);
+    try {
+      const child = spawn(mintty, ["-t", `${agent.project}: ${agent.name}`, "/usr/bin/bash", "-l", toBashPath(script)], {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: false,
+      });
+      child.on("error", (err) => this.update(agent.id, { status: "failed", exit_info: `Couldn't open Git Bash: ${err.message}` }));
+      child.unref();
+    } catch (err) {
+      this.update(agent.id, { status: "failed", exit_info: `Couldn't open Git Bash: ${(err as Error).message}` });
+      return;
+    }
 
-    readline.createInterface({ input: proc.stdout }).on("line", (line) => {
-      if (!line.trim()) return;
-      let ev: unknown;
-      try {
-        ev = JSON.parse(line);
-      } catch {
-        return;
+    // Record claude's PID once it's up (mintty doesn't hand it back).
+    void (async () => {
+      for (let i = 0; i < 10; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const pid = await findClaudePid(agent.sessionId);
+        if (pid) {
+          if (this.get(agent.id)?.status === "starting") this.update(agent.id, { pid });
+          return;
+        }
       }
-      const parsed = parseEvent(ev);
-      for (const e of parsed.entries) this.addEntry(agent.id, e.kind, e.text);
-      const patch: Partial<Row> = {};
-      if (parsed.cwd) patch.cwd = parsed.cwd;
-      if (parsed.costUsd !== undefined) patch.cost_usd = parsed.costUsd;
-      if (parsed.status && this.get(agent.id)?.status !== "stopping") patch.status = parsed.status;
-      if (!parsed.status && parsed.cwd && this.get(agent.id)?.status === "starting") patch.status = "idle";
-      if (Object.keys(patch).length) this.update(agent.id, patch);
-    });
-
-    readline.createInterface({ input: proc.stderr }).on("line", (line) => {
-      const buf = this.stderr.get(agent.id);
-      if (!buf || !line.trim()) return;
-      buf.push(line);
-      if (buf.length > 20) buf.shift();
-    });
-
-    proc.on("error", (err) => {
-      if (this.procs.get(agent.id) !== proc) return;
-      this.procs.delete(agent.id);
-      this.finish(agent.id, "failed", `Could not start claude: ${err.message}`);
-    });
-    proc.on("exit", (code, signal) => {
-      if (this.procs.get(agent.id) !== proc) return;
-      this.procs.delete(agent.id);
-      const wasStopping = this.get(agent.id)?.status === "stopping";
-      const err = this.stderr.get(agent.id)?.slice(-5).join("\n");
-      if (wasStopping || code === 0) this.finish(agent.id, "stopped", "Stopped");
-      else this.finish(agent.id, "failed", `Exited (${code ?? signal})${err ? `\n${err}` : ""}`);
-    });
+      if (this.get(agent.id)?.status === "starting") {
+        this.update(agent.id, { status: "failed", exit_info: "Claude didn't start in its window." });
+      }
+    })();
   }
 
-  private finish(id: string, status: AgentStatus, info: string) {
-    this.addEntry(id, status === "failed" ? "error" : "system", info);
-    this.update(id, { status, exit_info: info });
-  }
-
-  private addEntry(agentId: string, kind: EntryKind, text: string) {
-    const at = Date.now();
-    const r = this.db
-      .prepare("INSERT INTO agent_entries (agent_id, at, kind, text) VALUES (?, ?, ?, ?)")
-      .run(agentId, at, kind, text);
-    this.db.prepare("UPDATE agents SET last_activity = ? WHERE id = ?").run(at, agentId);
-    const entry: Entry = { id: Number(r.lastInsertRowid), agentId, at, kind, text };
-    this.emit("entry", entry);
+  /** Every few seconds: promote agents that reported in, and notice ones that have gone. */
+  private check() {
+    const now = Date.now();
+    for (const a of this.list()) {
+      const stuck = a.status === "failed" && !!a.pid;
+      if (a.status !== "starting" && a.status !== "running" && !stuck) continue;
+      if (a.pid && !isAlive(a.pid)) {
+        this.update(a.id, { status: stuck ? "failed" : "stopped", pid: null, exit_info: stuck ? a.exitInfo : "Window closed" });
+        continue;
+      }
+      if (a.status === "starting" || stuck) {
+        const seen = this.db.prepare("SELECT 1 FROM sessions WHERE id = ?").get(a.sessionId);
+        if (seen) this.update(a.id, { status: "running", exit_info: null });
+        else if (stuck) continue;
+        else if (a.pid && now - a.createdAt > START_GRACE_MS) {
+          // Alive but silent: almost always a question in its window (e.g. "trust this folder?").
+          this.update(a.id, {
+            status: "failed",
+            exit_info: "It started but hasn't reported in. It's probably waiting at a question in its window on the PC.",
+          });
+        }
+      }
+    }
   }
 
   private update(id: string, patch: Partial<Row>) {
@@ -317,9 +306,9 @@ export class AgentManager extends EventEmitter {
   }
 }
 
-const g = globalThis as unknown as { __mondoAgents?: AgentManager };
+const g = globalThis as unknown as { __mondoAgentManager?: AgentManager };
 
 /** Shared manager for the server (survives dev reloads; restart after editing this file). */
 export function getAgents(): AgentManager {
-  return (g.__mondoAgents ??= new AgentManager(getDb()));
+  return (g.__mondoAgentManager ??= new AgentManager(getDb()));
 }

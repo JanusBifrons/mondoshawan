@@ -4,13 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, Loader2, Plus, X } from "lucide-react";
-import { AgentStatusBadge, FIELD, ago, folderName, isRunning, useNow } from "@/components/agent-ui";
+import { AgentStatusBadge, EDGE, FIELD, ago, folderName, isLive, shownStatus, useAgents, useNow } from "@/components/agent-ui";
 import { MondoMark } from "@/components/elements";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import type { Agent } from "@/lib/agents";
+import type { AgentView } from "@/lib/agent-views";
 import { cn } from "@/lib/utils";
 
 interface Place {
@@ -18,22 +17,8 @@ interface Place {
   name: string;
   path: string;
   exists: boolean;
-  worktrees: { path: string; branch: string | null }[];
-}
-
-function useAgents() {
-  const [agents, setAgents] = useState<Agent[] | null>(null);
-  const [skew, setSkew] = useState(0);
-  useEffect(() => {
-    const es = new EventSource("/api/agents/stream");
-    es.addEventListener("agents", (ev) => {
-      const d = JSON.parse((ev as MessageEvent).data) as { agents: Agent[]; now: number };
-      setAgents(d.agents);
-      setSkew(d.now - Date.now());
-    });
-    return () => es.close();
-  }, []);
-  return { agents, skew };
+  trusted: boolean;
+  worktrees: { path: string; branch: string | null; trusted: boolean }[];
 }
 
 export default function AgentsPage() {
@@ -41,9 +26,8 @@ export default function AgentsPage() {
   const now = useNow(skew);
   const [creating, setCreating] = useState(false);
 
-  const running = (agents ?? []).filter((a) => isRunning(a.status));
-  const stopped = (agents ?? []).filter((a) => !isRunning(a.status));
-  const yourMove = running.filter((a) => a.status === "idle").length;
+  const live = (agents ?? []).filter(isLive);
+  const done = (agents ?? []).filter((a) => !isLive(a));
 
   return (
     <>
@@ -63,7 +47,8 @@ export default function AgentsPage() {
             <MondoMark className="size-16 opacity-80" />
             <p className="display text-sm font-bold text-leeloo">No agents yet</p>
             <p className="max-w-md text-sm text-muted-foreground">
-              Start a Claude Code agent in one of your projects, then talk to it from here or from your phone.
+              Start a Claude Code agent in one of your projects. It opens in its own Git Bash window on the PC, and you
+              chat with it in the Claude app under Remote Control.
             </p>
             <Button onClick={() => setCreating(true)}>
               <Plus /> New agent
@@ -71,21 +56,19 @@ export default function AgentsPage() {
           </Card>
         )}
 
-        {running.length > 0 && (
+        {live.length > 0 && (
           <section className="space-y-2">
-            <h2 className="readout">
-              Running ({running.length}){yourMove > 0 && <span className="text-air"> · {yourMove} waiting for you</span>}
-            </h2>
-            {running.map((a) => (
+            <h2 className="readout">Running ({live.length})</h2>
+            {live.map((a) => (
               <AgentRow key={a.id} agent={a} now={now} />
             ))}
           </section>
         )}
 
-        {stopped.length > 0 && (
+        {done.length > 0 && (
           <section className="space-y-2 opacity-80">
-            <h2 className="readout">Stopped ({stopped.length})</h2>
-            {stopped.map((a) => (
+            <h2 className="readout">Stopped ({done.length})</h2>
+            {done.map((a) => (
               <AgentRow key={a.id} agent={a} now={now} />
             ))}
           </section>
@@ -95,27 +78,23 @@ export default function AgentsPage() {
   );
 }
 
-const EDGE: Record<Agent["status"], string> = {
-  starting: "shadow-[inset_3px_0_0_var(--earth)]",
-  working: "shadow-[inset_3px_0_0_var(--fire)]",
-  idle: "shadow-[inset_3px_0_0_var(--air)]",
-  stopping: "shadow-[inset_3px_0_0_var(--water)]",
-  stopped: "shadow-[inset_3px_0_0_var(--water)]",
-  failed: "shadow-[inset_3px_0_0_var(--taxi)]",
-};
-
-function AgentRow({ agent: a, now }: { agent: Agent; now: number }) {
+function AgentRow({ agent: a, now }: { agent: AgentView; now: number }) {
+  const shown = shownStatus(a);
+  const where = a.session?.worktree || a.worktreeName || folderName(a.cwd);
   return (
     <Link href={`/agents/${a.id}`} className="block">
-      <Card size="sm" className={cn("flex-row items-center gap-3 px-4 transition-colors hover:bg-accent/40", EDGE[a.status])}>
+      <Card size="sm" className={cn("flex-row items-center gap-3 px-4 transition-colors hover:bg-accent/40", EDGE[shown])}>
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate font-semibold">{a.name}</span>
-            <AgentStatusBadge status={a.status} />
+            <AgentStatusBadge shown={shown} />
           </div>
           <div className="readout truncate normal-case">
-            {a.project} · {folderName(a.cwd)} · {ago(now - a.lastActivity)}
+            {a.project} · {where} · {ago(now - Math.max(a.lastActivity, a.session?.lastActivity ?? 0))}
           </div>
+          {a.session?.lastMessage && isLive(a) && (
+            <p className="line-clamp-1 text-xs text-muted-foreground">{a.session.lastMessage}</p>
+          )}
         </div>
         <ChevronRight className="size-4 shrink-0 text-brass" />
       </Card>
@@ -124,18 +103,17 @@ function AgentRow({ agent: a, now }: { agent: Agent; now: number }) {
 }
 
 const MODE_HELP: Record<string, string> = {
-  auto: "Auto: Claude decides what's safe to run (recommended)",
-  acceptEdits: "Accept edits: file edits allowed, risky commands denied",
-  plan: "Plan: read and plan only, no changes",
-  manual: "Manual: anything that would ask permission is denied",
+  auto: "Auto: Claude decides what's safe; anything else asks you in the Claude app",
+  acceptEdits: "Accept edits: file edits allowed; commands ask you in the Claude app",
+  plan: "Plan: reads and plans only, no changes",
+  manual: "Manual: everything asks you in the Claude app",
 };
 
 function NewAgentForm({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const [places, setPlaces] = useState<Place[] | null>(null);
   const [project, setProject] = useState("");
-  const [where, setWhere] = useState<string>("root"); // "root" | "new" | worktree path
-  const [worktreeName, setWorktreeName] = useState("");
+  const [where, setWhere] = useState<string>("new"); // "new" | "root" | worktree path
   const [model, setModel] = useState("");
   const [mode, setMode] = useState("auto");
   const [prompt, setPrompt] = useState("");
@@ -147,7 +125,7 @@ function NewAgentForm({ onClose }: { onClose: () => void }) {
       .then((r) => r.json())
       .then((d: { projects: Place[] }) => {
         setPlaces(d.projects);
-        setProject((p) => p || d.projects.find((x) => x.exists)?.slug || "");
+        setProject((p) => p || d.projects.find((x) => x.exists && x.trusted)?.slug || d.projects.find((x) => x.exists)?.slug || "");
       })
       .catch(() => setError("Couldn't load projects"));
   }, []);
@@ -157,6 +135,8 @@ function NewAgentForm({ onClose }: { onClose: () => void }) {
     () => (current?.worktrees ?? []).filter((w) => w.path.replace(/\/$/, "").toLowerCase() !== current?.path.toLowerCase()),
     [current],
   );
+  const chosenTrusted =
+    where === "new" || where === "root" ? current?.trusted : worktrees.find((w) => w.path === where)?.trusted;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -169,7 +149,7 @@ function NewAgentForm({ onClose }: { onClose: () => void }) {
         body: JSON.stringify({
           project,
           cwd: where === "root" || where === "new" ? current?.path : where,
-          newWorktree: where === "new" ? worktreeName : "",
+          newWorktree: where === "new",
           model,
           permissionMode: mode,
           prompt,
@@ -202,11 +182,11 @@ function NewAgentForm({ onClose }: { onClose: () => void }) {
           <>
             <label className="block space-y-1.5">
               <span className="readout">Project</span>
-              <select className={FIELD} value={project} onChange={(e) => (setProject(e.target.value), setWhere("root"))}>
+              <select className={FIELD} value={project} onChange={(e) => (setProject(e.target.value), setWhere("new"))}>
                 {places.map((p) => (
                   <option key={p.slug} value={p.slug} disabled={!p.exists}>
                     {p.name}
-                    {!p.exists && " (missing)"}
+                    {!p.exists ? " (missing)" : !p.trusted ? " (not trusted yet)" : ""}
                   </option>
                 ))}
               </select>
@@ -215,33 +195,29 @@ function NewAgentForm({ onClose }: { onClose: () => void }) {
             <label className="block space-y-1.5">
               <span className="readout">Where</span>
               <select className={FIELD} value={where} onChange={(e) => setWhere(e.target.value)}>
+                <option value="new">New worktree and branch (recommended)</option>
                 <option value="root">Main checkout ({current ? folderName(current.path) : ""})</option>
-                <option value="new">New worktree…</option>
                 {worktrees.map((w) => (
                   <option key={w.path} value={w.path}>
                     Worktree: {folderName(w.path)}
                     {w.branch ? ` [${w.branch}]` : ""}
+                    {!w.trusted ? " (not trusted yet)" : ""}
                   </option>
                 ))}
               </select>
+              {where === "new" && (
+                <span className="block text-xs text-muted-foreground">
+                  The agent makes its own worktree and branch, then opens a pull request into main when done.
+                </span>
+              )}
             </label>
 
-            {where === "new" && (
-              <label className="block space-y-1.5">
-                <span className="readout">Worktree name</span>
-                <Input
-                  required
-                  value={worktreeName}
-                  onChange={(e) => setWorktreeName(e.target.value)}
-                  placeholder="e.g. missiles"
-                  pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,39}"
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                />
-                <span className="block text-xs text-muted-foreground">
-                  Created at .claude/worktrees/{worktreeName || "name"} on branch worktree-{worktreeName || "name"}.
-                </span>
-              </label>
+            {current && !chosenTrusted && (
+              <p className="rounded-md border border-taxi/40 bg-taxi/10 px-3 py-2 text-sm text-taxi">
+                Claude hasn&apos;t been told to trust this folder yet, so the agent would get stuck on that question in
+                its window. Next time you&apos;re at the PC, open Git Bash in {folderName(current.path)}, run{" "}
+                <code>claude</code> once and choose &ldquo;Yes, I trust this folder&rdquo;.
+              </p>
             )}
 
             <div className="grid grid-cols-2 gap-3">
@@ -260,7 +236,7 @@ function NewAgentForm({ onClose }: { onClose: () => void }) {
                   <option value="auto">Auto</option>
                   <option value="acceptEdits">Accept edits</option>
                   <option value="plan">Plan only</option>
-                  <option value="manual">Manual (deny)</option>
+                  <option value="manual">Ask for everything</option>
                 </select>
               </label>
             </div>
@@ -278,7 +254,7 @@ function NewAgentForm({ onClose }: { onClose: () => void }) {
 
             {error && <p className="text-sm text-destructive">{error}</p>}
 
-            <Button type="submit" className="w-full" disabled={busy || !project}>
+            <Button type="submit" className="w-full" disabled={busy || !project || !chosenTrusted}>
               {busy ? <Loader2 className="animate-spin" /> : <Plus />} Start agent
             </Button>
           </>
