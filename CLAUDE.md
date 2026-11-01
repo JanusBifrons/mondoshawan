@@ -161,8 +161,7 @@ Mondo **is** the design bible: a living tree (and web) of design nodes per proje
 - Server-side singletons (store, agent manager, resolver cache) live on `globalThis`, so they survive dev module reloads. The catch is that after editing `lib/store.ts` or anything it imports, you must restart the dev server, or the old store keeps running the old code.
 - Claude Code on Windows may report a cwd as `C:\...` or `/c/...`. Use `normalizePath` when comparing paths and `toNativePath` before handing one to git or fs.
 - **Design CLI from a worktree:** set `MONDO_DATA_DIR=C:/Users/alecv/Documents/Projects/mondoshawan/mondoshawan/data`. Otherwise it writes to the worktree's own `data/mondo.db`, not the real one.
-- **Worktree packages:** link the main checkout's `node_modules` with a junction (`New-Item -ItemType Junction`) instead of installing. Before `git worktree remove`, unlink it with `cmd /c rmdir <worktree>
-ode_modules`, or the removal fails partway.
+- **Worktree packages:** link the main checkout's `node_modules` with a junction (`New-Item -ItemType Junction`) instead of installing. **Always unlink it first** with `cmd /c rmdir <worktree>\node_modules` before `git worktree remove`: git follows the junction and deletes the main checkout's packages. (It happened once; `npm install` in the main folder, with Mondo stopped, repairs it.) From Git Bash, `mklink` doesn't work; use PowerShell.
 - **`findProject` takes a slug** (`projectSlug(name)`), not a project's display name.
 - **Don't run `npm ci` in a worktree while a server runs from it:** it fails on file locks and leaves `node_modules` half-deleted.
 - **A stale `.next/dev/types` breaks `next build`** after a route is deleted (it still references the old route). It's generated, so delete it.
