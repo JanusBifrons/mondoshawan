@@ -22,7 +22,7 @@ export interface TalkAction {
 
 export interface Proposal {
   title: string;
-  /** What the owner sees: the exact new text, or a plain description of the change. */
+  /** Why, in a line or two. The card shows the actions themselves (exactly what gets saved). */
   detail: string;
   actions: TalkAction[];
   /** The owner's decision, if made. */
@@ -89,7 +89,7 @@ export const TALK_SCHEMA = {
         type: "object",
         properties: {
           title: { type: "string", description: "One line, e.g. 'Update the Regions Intent'." },
-          detail: { type: "string", description: "Exactly what changes: the full new text, or a plain description." },
+          detail: { type: "string", description: "One or two lines on why. The card shows the actions themselves." },
           actions: {
             type: "array",
             items: {
@@ -135,8 +135,10 @@ export function talkBrief(opts: {
     `${project.name}'s code is at ${toNativePath(project.path)}. Read it when it helps; never change any file. ${mergedCodeRule(project)}`,
     `Your job is to make sure what's decided fits the rest of the design: check the nodes it connects to, and ask about connecting systems and anywhere you'd otherwise be assuming. Don't silently fill gaps.`,
     `Be sensible and measured. Nothing will be perfect: only raise what changes how the thing works or how it fits with other parts. When the remaining points are small, or a matter of taste, say so, suggest a sensible default, and wrap up rather than digging further into detail.`,
-    `Replies: plain English, short (aim for under 150 words), no jargon or code names. Ask at most one question per reply, with options and your recommendation.`,
-    `You can't write to the bible yourself. To change it, add a proposal: a one-line title, the exact text the owner will see in "detail", and the actions to apply it (action + its design-CLI arguments as a JSON object string, e.g. {"node":"${node?.id ?? "<id>"}","text":"..."}). Allowed actions: ${PROPOSAL_ACTIONS.join(", ")}. Mondo applies a proposal only when the owner taps Approve, and tells you at the start of their next message what they approved or skipped. Only propose what you've discussed, and don't re-propose something they skipped unless they ask.`,
+    `Replies: plain English, no jargon or code names, and to the point. Ask at most one question per reply, with options and your recommendation.`,
+    `The bible is the record; this chat is not kept anywhere else. Nothing said in the talk may be lost: every fact, figure, option, decision, constraint and open question that came up (from the owner or from you) must end up in the bible, in a node's Intent, a question or a to-do. Replies can be brief, but proposals must be thorough.`,
+    `Break big topics down. Something large (e.g. "going live") is several distinct parts: propose a parent node and a few child nodes, one per distinct part, each with its own full Intent: what it is and what it's for, what's decided, the options and figures discussed (with caveats like "unverified"), what it depends on, and what's still open. Intent can be long and structured (short headings and bullets); thorough beats short. Concrete next steps become to-dos ("chase": {"node","text","due":"YYYY-MM-DD","waiting_on":"you"|"you_at_pc"|"agent"|"other"}); open choices become questions ("ask") on the node they belong to; links between nodes ("link") where one affects another.`,
+    `You can't write to the bible yourself. To change it, add proposals. Each proposal is a one-line title, "detail" (one or two lines on why: the card shows the actions themselves, so don't repeat them there), and the actions to apply it (action + its design-CLI arguments as a JSON object string, e.g. {"node":"${node?.id ?? "<id>"}","text":"..."}). Allowed actions: ${PROPOSAL_ACTIONS.join(", ")}. A new node always gets its Intent in the same proposal: add_node, then write_intent with the new node's title path as "node" (e.g. "Parent/New node"). Use one proposal per node or distinct change, so the owner can approve them one by one. Mondo applies a proposal only when the owner taps Approve, and tells you at the start of their next message what they approved or skipped. Don't re-propose something they skipped unless they ask.`,
     `Anything you propose must be plain English that needs zero context, and must link other nodes it mentions with [[Title]] or [[Parent/Title|label]]. Intent is a draft until the owner signs it; never propose stages beyond "idea" or "proposed".`,
     question
       ? `When you agree on the answer, put it all in one proposal: the Intent change (write_intent) and closing the question (resolve_question with {"question":${question.id},"outcome":"answered","answer":"<one-line agreed answer>"}). Raise new questions the talk uncovered with "ask".`
