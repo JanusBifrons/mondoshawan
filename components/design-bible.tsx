@@ -17,6 +17,8 @@ import {
   Flag,
   GitCompareArrows,
   Link2,
+  Loader2,
+  MessagesSquare,
   Plus,
   ShieldCheck,
   Trash2,
@@ -1192,7 +1194,28 @@ function QuestionsTab({
   const [text, setText] = useState("");
   const [blocking, setBlocking] = useState(false);
   const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [talking, setTalking] = useState<number | null>(null);
+  const [talkError, setTalkError] = useState<string | null>(null);
+  const router = useRouter();
   const title = (id: string) => tree.find((n) => n.id === id)?.title ?? id;
+  /** Start an agent that talks this question through with the owner, then go to it. */
+  const discuss = async (questionId: number) => {
+    setTalking(questionId);
+    setTalkError(null);
+    try {
+      const r = await fetch(`/api/design/${slug}/discuss`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ node: detail.node.id, question: questionId, message: answers[questionId] ?? "" }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      router.push(`/agents/${encodeURIComponent(d.sessionId)}`);
+    } catch (err) {
+      setTalkError((err as Error).message);
+      setTalking(null);
+    }
+  };
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
@@ -1218,21 +1241,34 @@ function QuestionsTab({
             </div>
           )}
           {q.answer && <p className="text-sm text-muted-foreground">→ {q.answer}</p>}
+          {q.status === "open" && q.discussion && (
+            <a
+              href={`/agents/${encodeURIComponent(q.discussion)}`}
+              className="flex items-center gap-1.5 text-sm text-leeloo hover:underline"
+            >
+              <MessagesSquare className="size-3.5" /> Being talked through with an agent: open the conversation
+            </a>
+          )}
           {q.status === "open" && (
             <div className="space-y-2">
               <TextArea
                 rows={2}
-                placeholder="Answer"
+                placeholder={q.discussion ? "The answer you agreed (to close it)" : "Your first thoughts (optional)"}
                 value={answers[q.id] ?? ""}
                 onChange={(e) => setAnswers((s) => ({ ...s, [q.id]: e.target.value }))}
               />
               <div className="flex flex-wrap gap-2">
+                <Button size="sm" disabled={busy || talking !== null} onClick={() => discuss(q.id)}>
+                  {talking === q.id ? <Loader2 className="animate-spin" /> : <MessagesSquare />}
+                  {q.discussion ? "Discuss again" : "Discuss"}
+                </Button>
                 <Button
                   size="sm"
+                  variant="outline"
                   disabled={busy || !(answers[q.id] ?? "").trim()}
                   onClick={() => run({ action: "resolve_question", question: q.id, outcome: "answered", answer: answers[q.id] })}
                 >
-                  Answer
+                  <Check /> Close with this answer
                 </Button>
                 <Button
                   size="sm"
