@@ -186,8 +186,19 @@ export function splitByNode(p: RawProposal): RawProposal[] {
     }
   }
   if (groups.length <= 1) return [p];
+  const lastPart = (v: unknown) => (typeof v === "string" ? v.split("/").at(-1)!.trim() : "");
+  const fallback = (g: (typeof groups)[number]) => {
+    const a = g.actions[0];
+    if (g.actions.every((x) => x.action === "link")) return `Link: ${lastPart(a.args.from)} → ${lastPart(a.args.to)}`;
+    const node = lastPart(a.args.node);
+    return node ? `Changes to ${node}` : null;
+  };
   return groups.map((g, i) => ({
-    title: g.name ? `${g.actions.some((a) => a.action === "add_node") ? "New: " : ""}${g.name}` : i === 0 ? p.title : `${p.title} (part ${i + 1})`,
+    title: g.name
+      ? `${g.actions.some((a) => a.action === "add_node") ? "New: " : ""}${g.name}`
+      : i === 0
+        ? p.title
+        : (fallback(g) ?? `${p.title} (part ${i + 1})`),
     detail: i === 0 ? p.detail : "",
     actions: g.actions,
   }));

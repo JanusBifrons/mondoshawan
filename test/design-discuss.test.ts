@@ -130,6 +130,18 @@ describe("one proposal per node", () => {
     expect(parts[0].detail).toBe("why");
   });
 
+  it("names a split-off link by what it links", () => {
+    const parts = splitByNode({
+      title: "New: Performance bar",
+      detail: "",
+      actions: [
+        { action: "add_node", args: { title: "Performance bar", parent: "Going live" } },
+        { action: "link", args: { from: "Going live/Deploy path", to: "Going live/Test servers", type: "depends_on" } },
+      ],
+    });
+    expect(parts.map((p) => p.title)).toEqual(["New: Performance bar", "Link: Deploy path → Test servers"]);
+  });
+
   it("leaves a one-node proposal alone", () => {
     const p = { title: "Mines", detail: "", actions: [{ action: "write_intent", args: { node: "Mines", text: "x" } }, { action: "resolve_question", args: { question: 1, outcome: "answered" } }] };
     expect(splitByNode(p)).toEqual([p]);
