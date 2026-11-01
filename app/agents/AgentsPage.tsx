@@ -46,7 +46,8 @@ function useJobs() {
     const load = () =>
       fetch("/api/jobs", { cache: "no-store" })
         .then((r) => r.json())
-        .then((d: { jobs: UsageRun[] }) => setJobs(d.jobs))
+        // Design talk turns live on their talk page, not here (they still count in Usage).
+        .then((d: { jobs: UsageRun[] }) => setJobs(d.jobs.filter((j) => j.kind !== "talk")))
         .catch(() => {});
     load();
     const t = setInterval(load, 4000);

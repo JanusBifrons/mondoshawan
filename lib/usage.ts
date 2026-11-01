@@ -92,7 +92,7 @@ export function jobRun(j: Job): UsageRun {
     }),
     thinking: j.thinkingTokens,
     confidence: j.confidence,
-    href: `/agents/job/${j.id}`,
+    href: j.kind === "talk" && typeof j.input.talkId === "string" ? `/design/talk/${j.input.talkId}` : `/agents/job/${j.id}`,
   };
 }
 

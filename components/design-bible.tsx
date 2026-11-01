@@ -1210,7 +1210,7 @@ function QuestionsTab({
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
-      router.push(`/agents/${encodeURIComponent(d.sessionId)}`);
+      router.push(`/design/talk/${encodeURIComponent(d.talkId)}`);
     } catch (err) {
       setTalkError((err as Error).message);
       setTalking(null);
@@ -1243,10 +1243,10 @@ function QuestionsTab({
           {q.answer && <p className="text-sm text-muted-foreground">→ {q.answer}</p>}
           {q.status === "open" && q.discussion && (
             <a
-              href={`/agents/${encodeURIComponent(q.discussion)}`}
+              href={`/design/talk/${encodeURIComponent(q.discussion)}`}
               className="flex items-center gap-1.5 text-sm text-leeloo hover:underline"
             >
-              <MessagesSquare className="size-3.5" /> Being talked through with an agent: open the conversation
+              <MessagesSquare className="size-3.5" /> Being talked through: open the talk
             </a>
           )}
           {q.status === "open" && (
@@ -1260,7 +1260,7 @@ function QuestionsTab({
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" disabled={busy || talking !== null} onClick={() => discuss(q.id)}>
                   {talking === q.id ? <Loader2 className="animate-spin" /> : <MessagesSquare />}
-                  {q.discussion ? "Discuss again" : "Discuss"}
+                  {q.discussion ? "Start a new talk" : "Discuss"}
                 </Button>
                 <Button
                   size="sm"
@@ -1311,7 +1311,7 @@ function QuestionsTab({
           </Button>
         </div>
       </form>
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {(error || talkError) && <p className="text-xs text-destructive">{error ?? talkError}</p>}
     </div>
   );
 }

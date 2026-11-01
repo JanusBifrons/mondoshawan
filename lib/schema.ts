@@ -254,6 +254,39 @@ export const DESIGN_SCHEMA = `
   );
   CREATE INDEX IF NOT EXISTS design_chases_open ON design_chases(status, due_at);
   CREATE INDEX IF NOT EXISTS design_chases_node ON design_chases(node_id, status);
+
+  -- Design talks: a conversation with an agent inside Mondo (lib/design-talk.ts). Each owner
+  -- message is one turn, run as a background job that carries on the same Claude session.
+  CREATE TABLE IF NOT EXISTS design_talks (
+    id TEXT PRIMARY KEY,
+    project TEXT NOT NULL,
+    node_id TEXT,
+    question_id INTEGER,
+    session_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    closed_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS design_talks_node ON design_talks(node_id);
+  CREATE TABLE IF NOT EXISTS design_talk_turns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    talk_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    job_id TEXT,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS design_talk_turns_talk ON design_talk_turns(talk_id, id);
+  -- What the owner did with each proposed change (job_id + index into its proposals).
+  CREATE TABLE IF NOT EXISTS design_talk_decisions (
+    job_id TEXT NOT NULL,
+    idx INTEGER NOT NULL,
+    talk_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    error TEXT,
+    decided_at INTEGER NOT NULL,
+    PRIMARY KEY (job_id, idx)
+  );
   `;
 
 /**
