@@ -3,13 +3,23 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, ExternalLink, Loader2, Plus, Square, X } from "lucide-react";
-import { AgentStatusBadge, EDGE, FIELD, ago, folderName, isLive, shownForSession, shownStatus, useAgents, useNow } from "@/components/agent-ui";
+import { ChevronDown, ChevronRight, ExternalLink, Loader2, Plus, X } from "lucide-react";
+import {
+  AgentStatusBadge,
+  EDGE,
+  FIELD,
+  Origin,
+  StatusTiles,
+  ago,
+  folderName,
+  useFleet,
+  useNow,
+  type FleetItem,
+} from "@/components/agent-ui";
 import { MondoMark } from "@/components/elements";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import type { AgentView, OtherSessionView } from "@/lib/agent-views";
 import { cn } from "@/lib/utils";
 
 interface Place {
@@ -21,38 +31,55 @@ interface Place {
   worktrees: { path: string; branch: string | null; trusted: boolean }[];
 }
 
+const isNeedsYou = (i: FleetItem) => i.live && (i.shown === "waiting" || i.shown === "needs_permission" || i.shown === "failed");
+
+/**
+ * Mondo's home: every Claude session on the PC (Mondo's agents and yours), with what
+ * needs you first. Tap one for its details and actions.
+ */
 export default function AgentsPage() {
-  const { agents, others, skew } = useAgents();
+  const { items, skew } = useFleet();
   const now = useNow(skew);
   const [creating, setCreating] = useState(false);
+  const [showEnded, setShowEnded] = useState(false);
 
-  // Everything running on the PC, newest activity first: Mondo's agents and your own sessions.
-  const live = [
-    ...(agents ?? []).filter(isLive).map((a) => ({ kind: "agent" as const, a, at: Math.max(a.lastActivity, a.session?.lastActivity ?? 0) })),
-    ...others.map((o) => ({ kind: "other" as const, o, at: o.lastActivity })),
-  ].sort((x, y) => y.at - x.at);
-  const done = (agents ?? []).filter((a) => !isLive(a));
+  const all = items ?? [];
+  const needs = all.filter(isNeedsYou);
+  const running = all.filter((i) => i.live && !isNeedsYou(i));
+  const ended = all.filter((i) => !i.live);
+
+  useEffect(() => {
+    document.title = needs.length ? `(${needs.length}) Mondo` : "Mondo";
+  }, [needs.length]);
 
   return (
     <>
       <PageHeader title="Agents" kicker="Command">
+        {needs.length > 0 && (
+          <span className="flex items-center gap-2 rounded-sm bg-taxi px-2 py-1 text-xs font-bold uppercase tracking-wider text-black">
+            <span className="hazard h-3 w-3 rounded-[2px]" />
+            {needs.length} need{needs.length === 1 ? "s" : ""} you
+          </span>
+        )}
         {!creating && (
           <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus /> New agent
+            <Plus /> New
           </Button>
         )}
       </PageHeader>
 
-      <div className="mx-auto w-full max-w-3xl space-y-4 p-4 md:p-6">
+      <div className="mx-auto w-full max-w-3xl space-y-5 p-4 md:p-6">
         {creating && <NewAgentForm onClose={() => setCreating(false)} />}
 
-        {agents && agents.length === 0 && others.length === 0 && !creating && (
-          <Card className="items-center gap-3 px-6 py-12 text-center">
+        {items && <StatusTiles items={all} />}
+
+        {items && all.filter((i) => i.live).length === 0 && !creating && (
+          <Card className="items-center gap-3 px-6 py-10 text-center">
             <MondoMark className="size-16 opacity-80" />
-            <p className="display text-sm font-bold text-leeloo">No agents yet</p>
+            <p className="display text-sm font-bold text-leeloo">All quiet in the city</p>
             <p className="max-w-md text-sm text-muted-foreground">
-              Start a Claude Code agent in one of your projects. It opens in its own Git Bash window on the PC, and you
-              chat with it in the Claude app under Remote Control.
+              No Claude sessions are running. Start one here, or run <code>claude</code> in a terminal and it shows up
+              within a second.
             </p>
             <Button onClick={() => setCreating(true)}>
               <Plus /> New agent
@@ -60,25 +87,41 @@ export default function AgentsPage() {
           </Card>
         )}
 
-        {live.length > 0 && (
+        {needs.length > 0 && (
           <section className="space-y-2">
-            <h2 className="readout">Running ({live.length})</h2>
-            {live.map((x) =>
-              x.kind === "agent" ? (
-                <AgentRow key={x.a.id} agent={x.a} now={now} />
-              ) : (
-                <OtherRow key={x.o.sessionId} s={x.o} now={now} />
-              ),
-            )}
+            <h2 className="readout text-taxi">Needs you ({needs.length})</h2>
+            {needs.map((i) => (
+              <Row key={i.sessionId} item={i} now={now} />
+            ))}
           </section>
         )}
 
-        {done.length > 0 && (
-          <section className="space-y-2 opacity-80">
-            <h2 className="readout">Stopped ({done.length})</h2>
-            {done.map((a) => (
-              <AgentRow key={a.id} agent={a} now={now} />
+        {running.length > 0 && (
+          <section className="space-y-2">
+            <h2 className="readout">Running ({running.length})</h2>
+            {running.map((i) => (
+              <Row key={i.sessionId} item={i} now={now} />
             ))}
+          </section>
+        )}
+
+        {ended.length > 0 && (
+          <section className="space-y-2">
+            <button
+              type="button"
+              className="readout flex items-center gap-1 hover:text-leeloo"
+              onClick={() => setShowEnded((v) => !v)}
+            >
+              <ChevronDown className={cn("size-3.5 transition-transform", !showEnded && "-rotate-90")} />
+              Ended, last 7 days ({ended.length})
+            </button>
+            {showEnded && (
+              <div className="space-y-2 opacity-75">
+                {ended.map((i) => (
+                  <Row key={i.sessionId} item={i} now={now} />
+                ))}
+              </div>
+            )}
           </section>
         )}
       </div>
@@ -86,91 +129,32 @@ export default function AgentsPage() {
   );
 }
 
-function AgentRow({ agent: a, now }: { agent: AgentView; now: number }) {
-  const shown = shownStatus(a);
-  const where = a.session?.worktree || a.worktreeName || folderName(a.cwd);
+/** One session. Tapping it opens the drill-down; if it needs you, "Open in Claude" is right there. */
+function Row({ item: i, now }: { item: FleetItem; now: number }) {
+  const where = [i.project ?? "Unregistered folder", i.worktree || folderName(i.cwd), i.branch].filter(Boolean).join(" · ");
   return (
-    <Link href={`/agents/${a.id}`} className="block">
-      <Card size="sm" className={cn("flex-row items-center gap-3 px-4 transition-colors hover:bg-accent/40", EDGE[shown])}>
+    <Card size="sm" className={cn("gap-2 px-4 transition-colors hover:bg-accent/40", EDGE[i.shown])}>
+      <Link href={`/agents/${encodeURIComponent(i.sessionId)}`} className="flex items-center gap-3">
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate font-semibold">{a.name}</span>
-            <AgentStatusBadge shown={shown} />
-            <Origin mondo />
+            <span className="truncate font-semibold">{i.name}</span>
+            <AgentStatusBadge shown={i.shown} />
+            <Origin item={i} />
           </div>
           <div className="readout truncate normal-case">
-            {a.project} · {where} · {ago(now - Math.max(a.lastActivity, a.session?.lastActivity ?? 0))}
+            {where} · {ago(now - i.lastActivity)}
           </div>
-          {a.session?.lastMessage && isLive(a) && (
-            <p className="line-clamp-1 text-xs text-muted-foreground">{a.session.lastMessage}</p>
-          )}
+          {i.lastMessage && <p className="line-clamp-2 text-xs text-muted-foreground">{i.lastMessage}</p>}
         </div>
         <ChevronRight className="size-4 shrink-0 text-brass" />
-      </Card>
-    </Link>
-  );
-}
-
-/** Who started it: Mondo, or you (and from where). */
-function Origin({ mondo, from }: { mondo?: boolean; from?: string }) {
-  return (
-    <span
-      className={cn(
-        "readout rounded-sm border px-1.5 py-0.5 normal-case",
-        mondo ? "border-leeloo/50 text-leeloo" : "border-brass/40 text-brass",
-      )}
-    >
-      {mondo ? "Mondo" : `You · ${from}`}
-    </span>
-  );
-}
-
-/** A session you started yourself: open it in Claude (if Remote Control is on) or stop it. */
-function OtherRow({ s, now }: { s: OtherSessionView; now: number }) {
-  const shown = shownForSession(s.status);
-  const [stopping, setStopping] = useState(false);
-  const stop = async () => {
-    const label = s.name ?? s.worktree ?? "this session";
-    if (!confirm(`Stop ${label}? Its Claude closes straight away and anything it's doing is cut off. The conversation is saved; resume it with claude --resume.`)) return;
-    setStopping(true);
-    const r = await fetch(`/api/agents/sessions/${encodeURIComponent(s.sessionId)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "stop" }),
-    }).catch(() => null);
-    if (!r?.ok) {
-      alert("Couldn't stop it: it may have already closed.");
-      setStopping(false);
-    }
-  };
-  return (
-    <Card size="sm" className={cn("gap-2 px-4", EDGE[shown])}>
-      <div className="min-w-0 space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="truncate font-semibold">{s.name ?? s.worktree ?? "Claude session"}</span>
-          <AgentStatusBadge shown={shown} />
-          <Origin from={s.from} />
-        </div>
-        <div className="readout truncate normal-case">
-          {s.project ?? "Unregistered folder"} · {s.worktree || folderName(s.cwd)}
-          {s.branch ? ` · ${s.branch}` : ""} · {ago(now - s.lastActivity)}
-        </div>
-        {s.lastMessage && <p className="line-clamp-1 text-xs text-muted-foreground">{s.lastMessage}</p>}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {s.remoteUrl ? (
-          <Button asChild size="sm" variant="outline">
-            <a href={s.remoteUrl} target="_blank" rel="noreferrer">
-              <ExternalLink /> Open in Claude
-            </a>
-          </Button>
-        ) : (
-          <span className="text-xs text-muted-foreground">Remote Control is off, so you can only chat with it at the PC.</span>
-        )}
-        <Button size="sm" variant="ghost" className="ml-auto hover:text-destructive" disabled={stopping} onClick={stop}>
-          {stopping ? <Loader2 className="animate-spin" /> : <Square />} Stop
+      </Link>
+      {isNeedsYou(i) && i.remoteUrl && (
+        <Button asChild size="sm" className="w-fit">
+          <a href={i.remoteUrl} target="_blank" rel="noreferrer">
+            <ExternalLink /> Open in Claude
+          </a>
         </Button>
-      </div>
+      )}
     </Card>
   );
 }
@@ -230,7 +214,7 @@ function NewAgentForm({ onClose }: { onClose: () => void }) {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error ?? `HTTP ${res.status}`);
-      router.push(`/agents/${d.id}`);
+      router.push(`/agents/${encodeURIComponent(d.sessionId)}`);
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);

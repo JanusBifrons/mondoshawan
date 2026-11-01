@@ -2,11 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bot, Library, MonitorDot, PenTool, Settings } from "lucide-react";
+import { Bot, Library, PenTool, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TABS = [
-  { href: "/", label: "Sessions", icon: MonitorDot, exact: true },
   { href: "/agents", label: "Agents", icon: Bot },
   { href: "/design", label: "Design", icon: PenTool },
   { href: "/knowledge", label: "Knowledge", icon: Library },
@@ -24,9 +23,9 @@ export function MobileNav({ badges = {} }: { badges?: Record<string, number> }) 
       {/* Spacer so page content isn't hidden behind the fixed bar. */}
       <div className="h-16 md:hidden" aria-hidden />
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-brass/30 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-        <ul className="grid grid-cols-5">
-          {TABS.map(({ href, label, icon: Icon, exact }) => {
-            const active = exact ? pathname === href : pathname === href || pathname.startsWith(href + "/");
+        <ul className="grid grid-cols-4">
+          {TABS.map(({ href, label, icon: Icon }) => {
+            const active = pathname === href || pathname.startsWith(href + "/");
             return (
               <li key={href}>
                 <Link
