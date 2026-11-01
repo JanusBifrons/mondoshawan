@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, FolderKanban, Library, Map, MonitorDot, PenTool, Settings } from "lucide-react";
+import { useEffect } from "react";
+import { BookOpen, Bot, FolderKanban, Library, Map, MonitorDot, PenTool, Settings } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -19,6 +20,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { MondoMark } from "@/components/elements";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -62,6 +64,9 @@ function NavItem({
 
 export function AppSidebar({ projects }: { projects: SidebarProject[] }) {
   const pathname = usePathname();
+  const { setOpenMobile } = useSidebar();
+  // On phones the sidebar is a drawer: close it once a link has been followed.
+  useEffect(() => setOpenMobile(false), [pathname, setOpenMobile]);
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -86,6 +91,7 @@ export function AppSidebar({ projects }: { projects: SidebarProject[] }) {
           <SidebarGroupContent>
             <SidebarMenu>
               <NavItem href="/" label="Sessions" icon={MonitorDot} exact />
+              <NavItem href="/agents" label="Agents" icon={Bot} />
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

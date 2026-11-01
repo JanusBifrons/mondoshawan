@@ -8,8 +8,18 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
 
 ## Decisions (do not undo without discussion)
 - **Next.js is the app; Electron is just a window.** Electron starts the Next server if nothing answers on the port, then loads it. The server must stay runnable alone (`npm run server`) for Phase 3 (phone over LAN).
-- **Bind 127.0.0.1:4317 by default.** Host and port come from `MONDO_HOST`/`MONDO_PORT`, then from `mondo.config.json` `server`. LAN access needs auth first (Phase 3).
-- **Mondo never starts, stops or controls Claude Code sessions** in the MVP.
+- **Bind 127.0.0.1:4317 by default.** Host and port come from `MONDO_HOST`/`MONDO_PORT`, then from `mondo.config.json` `server`.
+- **Phones reach Mondo through the LAN gateway, never directly, and only once approved on the PC** (`scripts/lan-gateway.mjs`, started by `scripts/serve.mjs` when `server.lan.enabled`; `MONDO_LAN=0` skips it). Next stays on loopback, so hooks and Electron need no auth.
+  - Pairing: the Settings QR opens `/__mondo/pair?t=<token>` (token in `data/remote-token`). That only *requests* access: the gateway adds a pending row to the `devices` table with a 4-digit code and gives the phone a `mondo_device=<id>.<secret>` cookie (only a hash is stored). The PC's Mondo window shows "Allow this device?" (`components/pairing-prompt.tsx`, polling `/api/remote/devices`). Requests lapse after 10 minutes; at most 3 wait at once.
+  - Approving, denying and revoking happen only on the PC: those routes refuse requests carrying `x-mondo-remote`. Settings lists approved devices with Revoke.
+  - Every forwarded request needs an approved device. The gateway rejects cross-site Origins and forwards with Host/Origin rewritten plus `x-mondo-remote: 1`.
+  - Gateway side: `scripts/lan-devices.mjs`. PC side: `lib/devices.ts`. They share the table SQL and timeout, and a test checks they match. **Never import a `.mjs` file into the Next app**: it puts the dev server into a reload loop.
+- **Mondo starts and drives its own agents, but never touches sessions it didn't start.** Hand-started sessions are still watch-only (hooks). Agents (`lib/agents.ts`) are headless `claude -p --input-format stream-json --output-format stream-json --verbose --permission-prompts none` child processes:
+  - messages and interrupts (`control_request` / `interrupt`) go in on stdin; events come out on stdout and are parsed by `lib/agent-events.ts` into `agent_entries`;
+  - an agent can only start in a registered project or one of its existing worktrees, or make a new one with `--worktree <name>` (→ `.claude/worktrees/<name>`, branch `worktree-<name>`);
+  - permission modes offered: auto (default), acceptEdits, plan, manual. Never bypassPermissions. Anything that would prompt is denied, because nobody is at a terminal;
+  - agents die with the server; on startup any "running" agent is marked stopped, and Resume relaunches with `--resume <sessionId>` in its recorded cwd;
+  - agents run with the user's hooks, so they also show on the Sessions page.
 - **Hook script has no dependencies, a 1s timeout, swallows all errors, always exits 0, and prints nothing.** It is registered globally in `~/.claude/settings.json` by `scripts/install-hooks.mjs`, which does a dry run by default, backs up the file before changing it, merges, and can be undone with `scripts/uninstall-hooks.mjs`. Mondo's entries are identified by `mondo-hook.js` in the command.
 - **Hooks are `async: true`** (non-blocking), except SessionEnd, which is sync so it gets sent before the process exits.
 - **Events:** SessionStart, UserPromptSubmit, PostToolUse, Stop, Notification, SessionEnd. PostToolUse is there because no hook fires when a permission prompt is answered.
@@ -25,7 +35,8 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
 - **Stack:** shadcn/ui (Radix, `radix-nova` style) and Tailwind v4. Components live in `components/ui/` (add more with `npx shadcn@latest add <name>`). Light/dark mode comes from `next-themes` (class-based, follows the system by default).
 - **Hooks location:** shadcn's React hooks go to `lib/hooks/` (set in `components.json`), because `hooks/` is reserved for the Claude Code hook script.
 - **Layout:** `app/layout.tsx` wraps every page in the sidebar (`components/app-sidebar.tsx`). Each page renders its own `<PageHeader>`.
-- **Pages:** Sessions (`/`), Knowledge base (`/knowledge`, `/knowledge/<project>`), Settings (`/settings`), and "coming soon" placeholders (`/design`, `/roadmap`, `/prompts`).
+- **Mobile:** every page must work at 390px wide with no sideways scroll. Sessions switch to cards below `md`; the sidebar becomes a drawer that closes on navigation. Agents' chat view (`/agents/<id>`) is a full-height column with the composer pinned to the bottom.
+- **Pages:** Sessions (`/`), Agents (`/agents`, `/agents/<id>`), Knowledge base (`/knowledge`, `/knowledge/<project>`), Settings (`/settings`), and "coming soon" placeholders (`/design`, `/roadmap`, `/prompts`).
 
 ## Look and feel (Fifth Element theme)
 - **The rule:** Mondo is styled after The Fifth Element (1997). Use original styling only: no film logos, stills or quotes.
@@ -69,5 +80,5 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
 
 ## Notes
 - Next.js 16: route handler `params` is a Promise.
-- Server-side singletons (store, resolver cache) live on `globalThis`, so they survive dev module reloads. The catch is that after editing `lib/store.ts` or anything it imports, you must restart the dev server, or the old store keeps running the old code.
+- Server-side singletons (store, agent manager, resolver cache) live on `globalThis`, so they survive dev module reloads. The catch is that after editing `lib/store.ts` or anything it imports, you must restart the dev server, or the old store keeps running the old code.
 - Claude Code on Windows may report a cwd as `C:\...` or `/c/...`. Use `normalizePath` when comparing paths and `toNativePath` before handing one to git or fs.

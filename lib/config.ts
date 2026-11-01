@@ -39,7 +39,7 @@ export function findProject(slug: string): ProjectConfig | undefined {
 }
 
 export interface MondoConfig {
-  server: { host: string; port: number };
+  server: { host: string; port: number; lan?: { enabled?: boolean; host?: string; port?: number } };
   projects: ProjectConfig[];
 }
 

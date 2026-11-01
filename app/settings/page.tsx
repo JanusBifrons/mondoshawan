@@ -1,4 +1,9 @@
-import { CheckCircle2, CircleAlert, Cloud, XCircle } from "lucide-react";
+import { headers } from "next/headers";
+import QRCode from "qrcode";
+import { CheckCircle2, CircleAlert, Cloud, Smartphone, XCircle } from "lucide-react";
+import { remoteInfo, remoteToken } from "@/lib/remote";
+import { listApproved } from "@/lib/devices";
+import { DeviceList } from "@/components/device-list";
 import { getDb } from "@/lib/db";
 import { lastDriveSync, listDriveFiles } from "@/lib/drive";
 import { PageHeader } from "@/components/page-header";
@@ -22,6 +27,8 @@ export default async function SettingsPage() {
   }));
   const hooks = getHookStatus();
   const projects = await checkProjects();
+  // Set by the LAN gateway: the viewer is on a phone, so don't show the access token.
+  const remote = (await headers()).get("x-mondo-remote") === "1";
   const allHooks = hooks.events.every((e) => e.installed);
   const someHooks = hooks.events.some((e) => e.installed);
 
@@ -91,6 +98,8 @@ export default async function SettingsPage() {
             </p>
           </CardContent>
         </Card>
+
+        <PhoneAccess remote={remote} />
 
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -176,5 +185,79 @@ export default async function SettingsPage() {
         </Card>
       </div>
     </>
+  );
+}
+
+/** LAN gateway status, the pairing QR code (this PC only) and the approved phones. */
+async function PhoneAccess({ remote }: { remote: boolean }) {
+  const info = remoteInfo();
+  const url = info.urls[0];
+  const pairUrl = url && !remote ? `${url}/__mondo/pair?t=${encodeURIComponent(remoteToken())}` : null;
+  const qr = pairUrl && info.enabled
+    ? await QRCode.toString(pairUrl, { type: "svg", margin: 1, color: { dark: "#000000", light: "#ffffff" } })
+    : null;
+  const devices = listApproved();
+
+  return (
+    <Card className="lg:col-span-2">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Smartphone className="size-4" /> Phone access
+          {info.enabled ? (
+            <Badge variant="secondary" className="text-earth">
+              <CheckCircle2 /> On
+            </Badge>
+          ) : (
+            <Badge variant="secondary">Off</Badge>
+          )}
+        </CardTitle>
+        <CardDescription>
+          Phones on your network reach Mondo through a gateway on port {info.port}. Each phone must be approved here on
+          the PC before it can see or do anything. Mondo itself stays on this PC only.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 text-sm">
+        {!info.enabled ? (
+          <p className="text-muted-foreground">
+            Turn it on with <code className="rounded bg-muted px-1">&quot;lan&quot;: {"{"} &quot;enabled&quot;: true {"}"}</code>{" "}
+            under <code className="rounded bg-muted px-1">server</code> in mondo.config.json, then restart Mondo. Windows
+            will ask to let it through the firewall.
+          </p>
+        ) : remote ? (
+          <p className="text-muted-foreground">You&apos;re using Mondo from an approved device.</p>
+        ) : (
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+            {qr && (
+              <div
+                className="w-44 shrink-0 overflow-hidden rounded-md bg-white p-1"
+                dangerouslySetInnerHTML={{ __html: qr }}
+              />
+            )}
+            <div className="min-w-0 space-y-2">
+              <p>
+                Scan with your phone&apos;s camera. The phone shows a 4-digit code and this window asks you to allow it;
+                click <b>Allow</b> if the codes match. Approved phones stay signed in until you revoke them.
+              </p>
+              <div className="space-y-1">
+                {info.urls.map((u) => (
+                  <code key={u} className="block break-all">
+                    {u}
+                  </code>
+                ))}
+                {info.urls.length === 0 && <p className="text-taxi">No network address found.</p>}
+              </div>
+              <p className="text-muted-foreground">
+                The QR code only lets a device <i>ask</i>. To change it, delete{" "}
+                <code className="rounded bg-muted px-1">data/remote-token</code> and restart Mondo.
+              </p>
+            </div>
+          </div>
+        )}
+        <div className="space-y-2">
+          <h3 className="readout">Approved devices</h3>
+          <DeviceList devices={devices} canRevoke={!remote} />
+        </div>
+      </CardContent>
+    </Card>
   );
 }

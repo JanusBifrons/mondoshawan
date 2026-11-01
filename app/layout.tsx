@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Chakra_Petch, Share_Tech_Mono, Syncopate } from "next/font/google";
 import "./globals.css";
+import { headers } from "next/headers";
 import { AppSidebar } from "@/components/app-sidebar";
+import { PairingPrompt } from "@/components/pairing-prompt";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -21,7 +23,9 @@ export const metadata: Metadata = {
 // Reads mondo.config.json on each request so registry edits show up without a rebuild.
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Phones (via the LAN gateway) never see the "allow this device?" prompt.
+  const remote = (await headers()).get("x-mondo-remote") === "1";
   const projects = loadConfig().projects.map((p) => ({ name: p.name, slug: projectSlug(p.name) }));
   return (
     <html lang="en" className={cn(display.variable, sans.variable, mono.variable)} suppressHydrationWarning>
@@ -31,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <SidebarProvider>
               <AppSidebar projects={projects} />
               <SidebarInset className="min-w-0 bg-transparent">{children}</SidebarInset>
+              {!remote && <PairingPrompt />}
             </SidebarProvider>
           </TooltipProvider>
         </ThemeProvider>

@@ -252,7 +252,44 @@ function SessionTable({
   onForget?: (id: string) => void;
 }) {
   return (
-    <Card className="py-0">
+    <>
+      {/* Phones: one card per session. */}
+      <div className="space-y-2 md:hidden">
+        {sessions.map((s) => (
+          <Card key={s.id} size="sm" className={cn("gap-2 px-4", ROW_EDGE[s.status])}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="truncate font-semibold">
+                  {s.project ?? <span className="text-muted-foreground">Unregistered</span>}
+                  <span className="font-normal text-muted-foreground"> · {s.worktree || "—"}</span>
+                </div>
+                <div className="truncate font-mono text-xs text-diva">{s.branch ?? "—"}</div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <StatusBadge status={s.status} message={s.lastMessage} />
+                {onForget && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 hover:text-destructive"
+                    onClick={() => onForget(s.id)}
+                    aria-label="Remove from list"
+                  >
+                    <X />
+                  </Button>
+                )}
+              </div>
+            </div>
+            {s.lastMessage && <p className="line-clamp-2 text-xs text-muted-foreground">{s.lastMessage}</p>}
+            <div className="flex items-center gap-2">
+              <span className="readout shrink-0">{ago(now - s.lastActivity)}</span>
+              <SystemField value={s.system} onSave={(v) => onSystem(s.id, v)} />
+            </div>
+          </Card>
+        ))}
+      </div>
+
+    <Card className="hidden py-0 md:flex">
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
@@ -305,6 +342,7 @@ function SessionTable({
         </TableBody>
       </Table>
     </Card>
+    </>
   );
 }
 
