@@ -5,6 +5,8 @@ import { DesignError, HUMAN, addSource, getNodeDetail, getQuestion, resolveNode,
 import { runAction } from "./design-actions";
 import { LINK_TYPES } from "./design-meta";
 import { mergedCodeRule, mondoFolder } from "./design-discuss";
+import { cachedChanges } from "./design-freshness";
+import { startRegenerate } from "./design-regenerate";
 import { getJobs, type Job } from "./jobs";
 import { toNativePath } from "./paths";
 
@@ -87,6 +89,8 @@ export const PROPOSAL_ACTIONS = [
   "chase",
   "flag",
   "source",
+  // Not a bible write: re-check nodes' Reality against the merged code (starts a Regenerate job).
+  "regenerate",
 ] as const;
 
 /** The structured reply every talk turn returns. */
@@ -132,9 +136,12 @@ export function talkBrief(opts: {
   question: { id: number; text: string; blocking: boolean } | null;
   agentName: string;
   mondoPath: string;
+  /** Which nodes' Reality is out of date against the merged code (from lib/design-freshness). */
+  stale?: { against: string | null; titles: string[] } | null;
 }): string {
-  const { project, node, question, agentName, mondoPath } = opts;
+  const { project, node, question, agentName, mondoPath, stale } = opts;
   const cli = (args: string) => `npm run -s design -- ${project.name} ${args} --as agent:${agentName}`;
+  const p = toNativePath(project.path);
   return [
     `You are in a design conversation with the owner of ${project.name}, inside Mondo (their design bible app). Each reply you give is shown in Mondo's chat, and they answer there.`,
     node
@@ -144,7 +151,13 @@ export function talkBrief(opts: {
       ? `Specifically, one open design question on that node (question ${question.id}): "${question.text}". The owner's first message is their first thoughts on it, not a final answer.`
       : ``,
     `Also useful: \`${cli("tree")}\`, \`${cli("gaps")}\`. The design CLI is read-only for you.`,
-    `${project.name}'s code is at ${toNativePath(project.path)}. Read it when it helps; never change any file. ${mergedCodeRule(project)}`,
+    `${project.name}'s code is at ${p}. Read it when it helps; never change any file. ${mergedCodeRule(project)}`,
+    `**The bible can be out of date; the merged code and its history are the truth.** Before you tell the owner what exists or how something works today, check it against the merged code, not just the bible.`,
+    stale && stale.titles.length
+      ? `Mondo has checked: these nodes' code has changed since their Reality was written (merged code: ${stale.against ?? "origin/main"}), so treat their Reality as possibly wrong: ${stale.titles.join(", ")}. Nodes with no Reality were never checked against the code at all.`
+      : `Nodes with no Reality were never checked against the code, so don't take their Intent as a description of what's built.`,
+    `**When the owner says something already exists** ("we've done that", "that's built", "we designed that already"), or contradicts the bible, stop: don't argue from the bible. Verify first and look for the objective truth: search the merged code (\`git -C "${p}" grep -n -i "<term>" origin/main\`), its history (\`git -C "${p}" log origin/main --oneline -40\`, \`git -C "${p}" log origin/main -i --oneline -G "<term>"\`), merged pull requests (run \`gh pr list --state merged --limit 30 --search "<term>"\` from ${p}), and the bible's other nodes. Then reply with what's actually true, citing the evidence (file paths, commit ids, PR numbers), and say plainly where the bible was wrong. Never guess: if you can't find it, say so and what you searched.`,
+    `When the bible turns out to be wrong, fix it through a proposal: a stale Reality gets re-checked ("regenerate": {"nodes":["<node>", ...]}, which runs a background job that rewrites Reality from the merged code), and an Intent that no longer matches what was decided gets a corrected write_intent. Then carry on from the truth.`,
     `**Work in two phases, at the owner's pace. Never rush to proposals.**`,
     `**1. Discovery.** First understand the idea through back-and-forth: what the owner wants and why, how big it is, what's in and out of scope, what already exists (read the bible and the code), and what it touches. Ask one question per reply, with options and your recommendation, and play back your understanding as it firms up. Propose nothing in this phase. Keep it proportionate: a small idea may need one or two exchanges, a large one several.`,
     `**2. Lock-down, one aspect at a time.** This is requirements gathering. When the scope is clear, set out the plan in your reply: the aspects to settle, in logical order (foundations first), each a likely node; small ideas may be a single aspect. That plan is the requirements list. Get the owner's OK on it. Then take the aspects in order. Where the requirement is already clear, go straight to proposing that one node, filling in minor details yourself as stated defaults. Discuss only when the requirement is unclear, or when something really needs rethinking (rare): one question at a time, then propose. Wait for the owner to lock each node in before starting the next. Start each reply in this phase with where you are, e.g. "Aspect 2 of 5: Deploy path".`,
@@ -307,6 +320,23 @@ function decisionsNote(db: DB, talkId: string): string {
   return `${heldNote}[Mondo: your proposal from last time]\n${lines.join("\n")}\n\n`;
 }
 
+/** Does the owner seem to be saying "we've already done / built / designed that"? Pure. */
+export function soundsAlreadyDone(text: string): boolean {
+  return /\b(already|we('ve| have) (done|built|made|designed|got|added|merged|shipped)|(is|was|it's|that's|thats) (built|done|merged|live|shipped|in the game)|exists?|out of date|stale|outdated)\b/i.test(text);
+}
+
+/** "Check against the code": the owner asks the agent to stop and verify against the objective truth. */
+export function verifyTalk(db: DB, project: ProjectConfig, talkId: string): Talk {
+  const talk = talkRow(db, talkId);
+  if (getTalk(db, talkId).turns.some((t) => t.status === "thinking")) throw new DesignError("the agent is still thinking", 409);
+  runTurn(db, project, talk, "Check this against the code", false, {
+    auto: true,
+    prompt:
+      "Stop and check what we've been discussing against the objective truth: the merged code, its history and merged pull requests (not just the bible). Reply with what's actually true and the evidence (file paths, commit ids, PR numbers), say plainly where the bible or what you told me earlier was wrong, and propose the fixes (regenerate stale Reality, or correct the Intent).",
+  });
+  return getTalk(db, talkId);
+}
+
 /**
  * Run one turn. `text` is what the chat shows; `opts.prompt` replaces it as the instruction
  * (for turns Mondo sends after a decision), and `opts.auto` marks such a turn.
@@ -315,13 +345,19 @@ function runTurn(db: DB, project: ProjectConfig, talk: Row, text: string, first:
   const { node, question } = talkContext(db, project, talk);
   const mondoPath = mondoFolder();
   const agentName = `talk-${talk.id}`;
-  const prompt = first ? text : decisionsNote(db, talk.id) + (opts.prompt ?? text);
+  const body = opts.prompt ?? text;
+  const hint = !opts.auto && soundsAlreadyDone(text)
+    ? "[Mondo: the owner may be saying this already exists or was already decided. Verify against the merged code, its history and merged PRs before answering, and cite what you find.]\n\n"
+    : "";
+  const prompt = first ? hint + text : decisionsNote(db, talk.id) + hint + body;
+  const fresh = cachedChanges(project);
+  const stale = fresh ? { against: fresh.against, titles: fresh.changed.map((c) => c.title) } : null;
   const job = getJobs().start({
     kind: "talk",
     project: project.name,
     title: `Talk: ${talk.title}`,
     prompt,
-    brief: talkBrief({ project, node, question, agentName, mondoPath }),
+    brief: talkBrief({ project, node, question, agentName, mondoPath, stale }),
     schema: TALK_SCHEMA,
     cwd: mondoPath,
     input: { talkId: talk.id },
@@ -489,7 +525,7 @@ export function applyProposal(
   opts: { approve?: boolean; idea?: boolean } = {},
 ) {
   if (!actions.length) throw new DesignError("this proposal has nothing to apply");
-  if (opts.approve && !actions.some((a) => a.action === "write_intent")) {
+  if (opts.approve && !actions.some((a) => a.action === "write_intent" || a.action === "regenerate")) {
     throw new DesignError("there's no Intent in this card to approve; approve it as an idea instead");
   }
   for (const a of actions) {
@@ -497,8 +533,17 @@ export function applyProposal(
     const stage = a.args.stage;
     if (stage !== undefined && stage !== "idea" && stage !== "proposed") throw new DesignError(`a talk can't set stage "${stage}"`, 403);
   }
+  // Check re-check targets up front, so a bad node name fails the card before anything is written.
+  const creates = actions.some((a) => a.action === "add_node" || a.action === "ensure");
+  for (const a of actions) {
+    if (a.action !== "regenerate" || creates) continue;
+    const refs = Array.isArray(a.args.nodes) ? a.args.nodes : typeof a.args.node === "string" ? [a.args.node] : [];
+    if (!refs.length) throw new DesignError("re-check needs the nodes to check");
+    for (const ref of refs) if (typeof ref !== "string" || !resolveNode(db, project.name, ref)) throw new DesignError(`no such node to re-check: ${String(ref)}`, 404);
+  }
   tx(db, () => {
     for (const a of actions) {
+      if (a.action === "regenerate") continue; // started after the bible writes (below)
       const args = { ...a.args };
       // Agents sometimes leave a link's type out; "affects" is the safe default rather than failing the card.
       if (a.action === "link" && (typeof args.type !== "string" || !(LINK_TYPES as readonly string[]).includes(args.type))) args.type = "affects";
@@ -529,6 +574,12 @@ export function applyProposal(
       }
     }
   });
+  // Re-check stale Reality: a background Regenerate job for the named nodes (after the writes succeeded).
+  const toCheck = actions
+    .filter((a) => a.action === "regenerate")
+    .flatMap((a) => (Array.isArray(a.args.nodes) ? a.args.nodes : typeof a.args.node === "string" ? [a.args.node] : []))
+    .filter((n): n is string => typeof n === "string" && !!n.trim());
+  if (toCheck.length) startRegenerate(db, project, [...new Set(toCheck)]);
 }
 
 const nodeRef = (a: TalkAction, talk: { node_id: string | null }) => (typeof a.args.node === "string" ? a.args.node : talk.node_id);

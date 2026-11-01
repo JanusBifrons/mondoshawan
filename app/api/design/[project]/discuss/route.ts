@@ -2,6 +2,7 @@ import { findProject } from "@/lib/config";
 import { getDb } from "@/lib/db";
 import { DesignError } from "@/lib/design";
 import { startTalk } from "@/lib/design-talk";
+import { codeChanges } from "@/lib/design-freshness";
 import { forbidden, isCrossSite } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const question = typeof b.question === "number" && Number.isInteger(b.question) ? b.question : undefined;
   const message = typeof b.message === "string" ? b.message : "";
   try {
+    await codeChanges(getDb(), project).catch(() => null); // so the agent knows which nodes are stale
     const talk = startTalk(getDb(), project, { node, question, message });
     return Response.json({ talkId: talk.id }, { status: 201 });
   } catch (err) {
