@@ -49,9 +49,15 @@ export const MIGRATIONS: readonly string[] = [
   );
   CREATE INDEX drive_syncs_project ON drive_syncs(project, started_at);
   `,
-  // design bible: nodes (tree + stage), versioned intent/reality, reviews, questions, links
-  `
-  CREATE TABLE design_nodes (
+];
+
+/**
+ * Design bible tables. Created idempotently on every open instead of taking a numbered
+ * migration, so they never collide with migrations added on other branches.
+ * To change one of these tables later, add a numbered migration as usual.
+ */
+export const DESIGN_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS design_nodes (
     id              TEXT PRIMARY KEY,
     project         TEXT NOT NULL,
     parent_id       TEXT REFERENCES design_nodes(id),
@@ -67,9 +73,9 @@ export const MIGRATIONS: readonly string[] = [
     created_at      INTEGER NOT NULL,
     updated_at      INTEGER NOT NULL
   );
-  CREATE INDEX design_nodes_project ON design_nodes(project, parent_id);
+  CREATE INDEX IF NOT EXISTS design_nodes_project ON design_nodes(project, parent_id);
 
-  CREATE TABLE design_revisions (
+  CREATE TABLE IF NOT EXISTS design_revisions (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     node_id     TEXT NOT NULL REFERENCES design_nodes(id),
     field       TEXT NOT NULL,
@@ -82,9 +88,9 @@ export const MIGRATIONS: readonly string[] = [
     signed_at   INTEGER,
     signed_by   TEXT
   );
-  CREATE INDEX design_revisions_node ON design_revisions(node_id, field, id);
+  CREATE INDEX IF NOT EXISTS design_revisions_node ON design_revisions(node_id, field, id);
 
-  CREATE TABLE design_reviews (
+  CREATE TABLE IF NOT EXISTS design_reviews (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     node_id      TEXT NOT NULL REFERENCES design_nodes(id),
     intent_rev   INTEGER,
@@ -98,9 +104,9 @@ export const MIGRATIONS: readonly string[] = [
     closed_by    TEXT,
     closed_at    INTEGER
   );
-  CREATE INDEX design_reviews_node ON design_reviews(node_id, status);
+  CREATE INDEX IF NOT EXISTS design_reviews_node ON design_reviews(node_id, status);
 
-  CREATE TABLE design_questions (
+  CREATE TABLE IF NOT EXISTS design_questions (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     node_id      TEXT NOT NULL REFERENCES design_nodes(id),
     text         TEXT NOT NULL,
@@ -113,9 +119,9 @@ export const MIGRATIONS: readonly string[] = [
     resolved_by  TEXT,
     resolved_at  INTEGER
   );
-  CREATE INDEX design_questions_node ON design_questions(node_id, status);
+  CREATE INDEX IF NOT EXISTS design_questions_node ON design_questions(node_id, status);
 
-  CREATE TABLE design_links (
+  CREATE TABLE IF NOT EXISTS design_links (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     from_id     TEXT NOT NULL REFERENCES design_nodes(id),
     to_id       TEXT NOT NULL REFERENCES design_nodes(id),
@@ -126,7 +132,7 @@ export const MIGRATIONS: readonly string[] = [
     UNIQUE (from_id, to_id, type)
   );
 
-  CREATE TABLE design_sources (
+  CREATE TABLE IF NOT EXISTS design_sources (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     node_id     TEXT NOT NULL REFERENCES design_nodes(id),
     ref         TEXT NOT NULL,
@@ -135,7 +141,7 @@ export const MIGRATIONS: readonly string[] = [
     created_at  INTEGER NOT NULL
   );
 
-  CREATE TABLE design_events (
+  CREATE TABLE IF NOT EXISTS design_events (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
     project  TEXT NOT NULL,
     node_id  TEXT,
@@ -144,7 +150,6 @@ export const MIGRATIONS: readonly string[] = [
     type     TEXT NOT NULL,
     detail   TEXT NOT NULL DEFAULT '{}'
   );
-  CREATE INDEX design_events_project ON design_events(project, id);
-  CREATE INDEX design_events_node ON design_events(node_id, id);
-  `,
-];
+  CREATE INDEX IF NOT EXISTS design_events_project ON design_events(project, id);
+  CREATE INDEX IF NOT EXISTS design_events_node ON design_events(node_id, id);
+  `;
