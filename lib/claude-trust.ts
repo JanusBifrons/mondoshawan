@@ -25,7 +25,7 @@ type Projects = Record<string, { hasTrustDialogAccepted?: boolean }>;
 
 function readProjects(file = path.join(os.homedir(), ".claude.json")): Projects {
   try {
-    return (JSON.parse(fs.readFileSync(file, "utf8")).projects ?? {}) as Projects;
+    return (JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8")).projects ?? {}) as Projects;
   } catch {
     return {};
   }

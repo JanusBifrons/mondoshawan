@@ -234,15 +234,15 @@ export class AgentManager extends EventEmitter {
     const dir = path.join(dataDir(), "agents");
     fs.mkdirSync(dir, { recursive: true });
     const script = path.join(dir, `${agent.id}.sh`);
-    fs.writeFileSync(script, launchScript(agent.cwd, args));
+    fs.writeFileSync(/*turbopackIgnore: true*/ script, launchScript(agent.cwd, args));
 
     const mintty = minttyPath();
-    if (!fs.existsSync(mintty)) {
+    if (!fs.existsSync(/*turbopackIgnore: true*/ mintty)) {
       this.update(agent.id, { status: "failed", exit_info: `Git Bash not found at ${mintty}` });
       return;
     }
     try {
-      const child = spawn(mintty, ["-t", `${agent.project}: ${agent.name}`, "/usr/bin/bash", "-l", toBashPath(script)], {
+      const child = spawn(/*turbopackIgnore: true*/ mintty, ["-t", `${agent.project}: ${agent.name}`, "/usr/bin/bash", "-l", toBashPath(script)], {
         detached: true,
         stdio: "ignore",
         windowsHide: false,
