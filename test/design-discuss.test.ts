@@ -46,6 +46,7 @@ describe("design talk brief", () => {
     expect(b).toContain("1. Discovery.");
     expect(b).toContain("Propose nothing in this phase");
     expect(b).toContain("Lock-down, one aspect at a time");
+    expect(b).toContain("This is requirements gathering");
     expect(b).toContain("At most one proposal per reply");
     expect(b).toContain("a developed design, not notes");
   });
