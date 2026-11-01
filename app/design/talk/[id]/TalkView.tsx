@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowLeft, Check, Loader2, MessagesSquare, Send, Square, X } from "lucide-react";
+import { ArrowLeft, Check, Loader2, MessagesSquare, PenLine, Send, Square, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { fmtDuration, fmtTokens } from "@/components/usage-ui";
 import { Button } from "@/components/ui/button";
@@ -119,12 +119,15 @@ const PROPOSAL_STATE: Record<Proposal["status"], { label: string; cls: string }>
 function ProposalCard({
   p,
   onDecide,
+  onChange,
   busy,
   tree,
   slug,
 }: {
   p: Proposal;
   onDecide: (approve: boolean) => void;
+  /** Start a reply about this part ("that's wrong because ..."). */
+  onChange: () => void;
   busy: boolean;
   tree: LinkableNode[];
   slug: string | null;
@@ -148,10 +151,18 @@ function ProposalCard({
           <Button size="sm" disabled={busy} onClick={() => onDecide(true)}>
             <Check /> Approve
           </Button>
+          <Button size="sm" variant="outline" disabled={busy} onClick={onChange}>
+            <PenLine /> Change this
+          </Button>
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => onDecide(false)}>
             <X /> Skip
           </Button>
         </div>
+      )}
+      {p.status !== "pending" && (
+        <button type="button" className="readout normal-case hover:text-leeloo" onClick={onChange}>
+          Change this
+        </button>
       )}
     </div>
   );
@@ -164,7 +175,9 @@ function Turn({
   slug,
   busy,
   decide,
+  change,
 }: {
+  change: (title: string) => void;
   t: TalkTurn;
   first: boolean;
   tree: LinkableNode[];
@@ -194,7 +207,7 @@ function Turn({
         </Card>
       )}
       {t.proposals.map((p, i) => (
-        <ProposalCard key={i} p={p} busy={busy} tree={tree} slug={slug} onDecide={(approve) => t.jobId && decide(t.jobId, i, approve)} />
+        <ProposalCard key={i} p={p} busy={busy} tree={tree} slug={slug} onDecide={(approve) => t.jobId && decide(t.jobId, i, approve)} onChange={() => change(p.title)} />
       ))}
       {t.status !== "thinking" && t.error && (
         <p className="whitespace-pre-wrap rounded-md border border-taxi/40 bg-taxi/10 px-3 py-2 text-sm text-taxi">{t.error}</p>
@@ -213,6 +226,11 @@ export default function TalkView({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
+  const change = (title: string) => {
+    setText((t) => (t.trim() ? t + "\n\n" : "") + `About "${title}": `);
+    setTimeout(() => input.current?.focus(), 0);
+  };
   const lastCount = useRef(0);
 
   const load = useCallback(async () => {
@@ -333,6 +351,7 @@ export default function TalkView({ id }: { id: string }) {
                 slug={slug}
                 busy={busy}
                 decide={(jobId, index, approve) => post({ action: "decide", jobId, index, approve })}
+                change={change}
               />
             ))}
             {settled && !thinking && (
@@ -353,6 +372,7 @@ export default function TalkView({ id }: { id: string }) {
         >
           <div className="mx-auto flex max-w-3xl items-end gap-2">
             <textarea
+              ref={input}
               rows={2}
               value={text}
               onChange={(e) => setText(e.target.value)}
