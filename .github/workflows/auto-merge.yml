@@ -5,13 +5,11 @@ name: Auto-merge
 # merges with a merge commit. Draft PRs are skipped until they're marked ready.
 # To keep a PR open, mark it draft or run `gh pr merge <n> --disable-auto`.
 #
-# The repo's "delete branch on merge" setting doesn't fire when the merge was made by
-# auto-merge that this workflow (the Actions bot) enabled, so the `cleanup` job deletes
-# the merged branch itself.
+# Merged branches are deleted by branch-cleanup.yml (see there for why).
 
 on:
   pull_request_target:
-    types: [opened, reopened, ready_for_review, closed]
+    types: [opened, reopened, ready_for_review]
     branches: [main]
 
 permissions:
@@ -21,7 +19,6 @@ permissions:
 jobs:
   enable:
     if: >-
-      github.event.action != 'closed' &&
       !github.event.pull_request.draft &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
@@ -34,17 +31,3 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: gh pr merge "$PR_URL" --auto --merge
 
-  cleanup:
-    if: >-
-      github.event.action == 'closed' &&
-      github.event.pull_request.merged &&
-      github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Delete the merged branch
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BRANCH: ${{ github.event.pull_request.head.ref }}
-        # Already deleted (e.g. by the repo setting) is fine.
-        run: gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/$BRANCH" || echo "branch $BRANCH already gone"

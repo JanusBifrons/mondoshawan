@@ -1,0 +1,41 @@
+name: Branch cleanup
+
+# Deletes branches whose PRs have been merged into main.
+#
+# Why a sweep: PRs merge through auto-merge that the Actions bot enabled (auto-merge.yml).
+# GitHub doesn't start workflows from events caused by the bot's token, and the repo's
+# "delete branch on merge" setting doesn't fire for those merges either, so nothing runs
+# at merge time. This hourly sweep (or a manual run) catches them instead.
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Delete merged branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Head branches (from this repo) of recently merged PRs into main.
+          merged=$(gh pr list -R "$REPO" --state merged --base main --limit 100 \
+            --json headRefName,headRepositoryOwner \
+            --jq ".[] | select(.headRepositoryOwner.login == \"${REPO%%/*}\") | .headRefName" | sort -u)
+          # Only delete a branch with no open PR (it may have been reused).
+          open=$(gh pr list -R "$REPO" --state open --limit 100 --json headRefName --jq '.[].headRefName' | sort -u)
+          existing=$(gh api "repos/$REPO/branches" --paginate --jq '.[].name' | sort -u)
+          for b in $(comm -12 <(echo "$merged") <(echo "$existing") | comm -23 - <(echo "$open")); do
+            [ "$b" = main ] && continue
+            echo "Deleting merged branch: $b"
+            gh api -X DELETE "repos/$REPO/git/refs/heads/$b"
+          done

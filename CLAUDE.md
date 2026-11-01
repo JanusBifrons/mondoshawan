@@ -11,7 +11,7 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
 - Remote: github.com/JanusBifrons/mondoshawan. Open PRs with `gh pr create`.
 - **CI and auto-merge:**
   - **CI** (`.github/workflows/ci.yml`, job `verify`) runs typecheck, tests and `next build` on every PR and on pushes to `main`. `main` is protected: a PR can only merge once `verify` passes.
-  - **Every PR merges itself once it's green.** `.github/workflows/auto-merge.yml` turns on auto-merge (merge commit, branch deleted) when a PR opens. To be safe, also run `gh pr merge <n> --auto --merge` right after `gh pr create`.
+  - **Every PR merges itself once it's green.** `.github/workflows/auto-merge.yml` turns on auto-merge (merge commit) when a PR opens. `branch-cleanup.yml` deletes merged branches hourly, because GitHub doesn't trigger workflows or delete-on-merge for merges made by the Actions bot. For the same reason, CI on `main` doesn't re-run after those merges; the PR run is the check. To be safe, also run `gh pr merge <n> --auto --merge` right after `gh pr create`.
   - To hold a PR back, open it as a draft, or run `gh pr merge <n> --disable-auto`.
   - Run `npm run typecheck && npm test` before pushing, so CI isn't the first to find a failure.
   - If `main` moves while your PR is open, merge it in (`git fetch origin && git merge origin/main`), re-run the checks and push. Don't rebase a pushed branch.
