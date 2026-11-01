@@ -54,13 +54,21 @@ export function parseCookie(value) {
   return { id: value.slice(0, i), secret: value.slice(i + 1) };
 }
 
-/** Find the device a cookie belongs to, if the secret matches. Any status. */
-export function deviceForCookie(db, value) {
+/** Strip the IPv4-in-IPv6 prefix so "::ffff:192.168.1.5" and "192.168.1.5" compare equal. */
+const plainIp = (ip) => String(ip ?? "").replace(/^::ffff:/, "");
+
+/**
+ * Find the device a cookie belongs to, if the secret matches. Any status.
+ * When `ip` is given, an approved device used from a different address than it paired
+ * from comes back as "moved": a copied cookie is useless on another machine.
+ */
+export function deviceForCookie(db, value, ip) {
   const c = parseCookie(value);
   if (!c) return null;
   const row = db.prepare("SELECT * FROM devices WHERE id = ?").get(c.id);
   if (!row || !sameHex(row.secret_hash, hash(c.secret))) return null;
   if (row.status === "pending" && row.created_at < Date.now() - PENDING_TTL_MS) return { ...row, status: "expired" };
+  if (row.status === "approved" && ip !== undefined && row.ip && plainIp(row.ip) !== plainIp(ip)) return { ...row, status: "moved" };
   return row;
 }
 

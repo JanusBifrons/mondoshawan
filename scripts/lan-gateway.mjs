@@ -8,7 +8,8 @@
 //      holding that device's own secret. The phone waits on /__mondo/wait.
 //   3. The PC (Mondo window) asks "Allow this phone? code 1234". Approval happens only on
 //      the PC: Next refuses approval requests that came through this gateway.
-//   4. From then on, that cookie is the phone's key, until it is revoked in Settings.
+//   4. From then on, that cookie is the phone's key, until it is revoked in Settings. It only
+//      works from the address the phone paired from, so a copied cookie is useless elsewhere.
 // The pairing token alone gets you nothing but a prompt on the PC.
 //
 // Forwarded requests have their Host and Origin rewritten to the local server, so Next's
@@ -127,7 +128,7 @@ export function startGateway({ host, port, target, getToken, dbFile }) {
     const c = readCookie(req, COOKIE);
     if (!c) return null;
     try {
-      return deviceForCookie(getDb(), c);
+      return deviceForCookie(getDb(), c, req.socket.remoteAddress ?? "");
     } catch (err) {
       console.error(`[mondo] LAN gateway: ${err.message}`);
       return null;
@@ -206,6 +207,8 @@ export function startGateway({ host, port, target, getToken, dbFile }) {
           return html(res, 200, waitPage(device.code));
         case "denied":
           return html(res, 403, endedPage("Access was denied on the PC."));
+        case "moved":
+          return html(res, 403, endedPage("This phone's network address has changed since it was approved, so Mondo needs to approve it again."));
         case "revoked":
           return html(res, 403, endedPage("This device was signed out of Mondo."));
         case "expired":

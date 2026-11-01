@@ -50,6 +50,15 @@ describe("phone pairing", () => {
     expect(listApproved(db)).toHaveLength(0);
   });
 
+  it("an approved key only works from the address it paired from", () => {
+    const db = openDb(":memory:");
+    const r = requestPairing(db, { userAgent: UA, ip: "::ffff:192.168.1.20" });
+    decideDevice(r.id, "approve", db);
+    expect(deviceForCookie(db, r.cookie, "192.168.1.20").status).toBe("approved");
+    expect(deviceForCookie(db, r.cookie, "::ffff:192.168.1.20").status).toBe("approved");
+    expect(deviceForCookie(db, r.cookie, "192.168.1.66").status).toBe("moved");
+  });
+
   it("deny ends a request", () => {
     const db = openDb(":memory:");
     const r = requestPairing(db, { userAgent: UA });
