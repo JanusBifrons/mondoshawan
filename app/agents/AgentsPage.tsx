@@ -215,8 +215,8 @@ function NewAgentForm({ onClose }: { onClose: () => void }) {
             {current && !chosenTrusted && (
               <p className="rounded-md border border-taxi/40 bg-taxi/10 px-3 py-2 text-sm text-taxi">
                 Claude hasn&apos;t been told to trust this folder yet, so the agent would get stuck on that question in
-                its window. Next time you&apos;re at the PC, open Git Bash in {folderName(current.path)}, run{" "}
-                <code>claude</code> once and choose &ldquo;Yes, I trust this folder&rdquo;.
+                its window. Next time you&apos;re at the PC, open <b>Settings → Folder trust</b> there and click the
+                button: it opens the question for every project at once.
               </p>
             )}
 

@@ -364,3 +364,23 @@ const g = globalThis as unknown as { __mondoAgentManager?: AgentManager };
 export function getAgents(): AgentManager {
   return (g.__mondoAgentManager ??= new AgentManager(getDb()));
 }
+
+/**
+ * Open a Git Bash window running plain `claude` in `folder`, so the user can answer
+ * "Do you trust this folder?" there. Mondo never answers it or edits the trust file.
+ */
+export function openTrustPrompt(label: string, folder: string): string | null {
+  const dir = path.join(dataDir(), "agents");
+  fs.mkdirSync(dir, { recursive: true });
+  const script = path.join(dir, `trust-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.sh`);
+  fs.writeFileSync(
+    /*turbopackIgnore: true*/ script,
+    [
+      `cd ${bashQuote(toBashPath(folder))} || { echo "Mondo: folder not found"; sleep 30; exit 1; }`,
+      `echo ${bashQuote(`Mondo: choose "Yes, I trust this folder" for ${label}, then close this window.`)}`,
+      "exec claude",
+      "",
+    ].join("\n"),
+  );
+  return openGitBashWindow(`Trust ${label}`, script);
+}
