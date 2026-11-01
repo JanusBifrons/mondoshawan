@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { openDb } from "@/lib/db";
 import { HUMAN, addNode, askQuestion, listOpenQuestions, resolveQuestion, setStage } from "@/lib/design";
-import { applyProposal, parseTalkResult, talkBrief } from "@/lib/design-talk";
+import { applyProposal, parseTalkResult, splitByNode, talkBrief } from "@/lib/design-talk";
+
 
 const AGENT = "agent:test";
 
@@ -39,12 +40,13 @@ describe("design talk brief", () => {
     expect(b).toContain(`"Weapons › Mines" (id n1)`);
     expect(b).toContain(`npm run -s design -- EQX-Net get '{"node":"n1"}' --as agent:talk-abc`);
     expect(b).toContain("never change any file");
-    expect(b).toContain("matter of taste");
+    expect(b).toContain("leave pure taste");
     expect(b).toContain("can't write to the bible yourself");
     expect(b).toContain("only when the owner taps Approve");
-    expect(b).toContain("Nothing said in the talk may be lost");
-    expect(b).toContain("Break big topics down");
-    expect(b).toContain("A new node always gets its Intent in the same proposal");
+    expect(b).toContain("Your goal is a developed design, not notes");
+    expect(b).toContain("Make the calls");
+    expect(b).toContain("Size it to the idea");
+    expect(b).toContain("one proposal per node");
   });
 
   it("starts an open talk from the tree", () => {
@@ -104,5 +106,44 @@ describe("talk replies and proposals", () => {
     expect(() => applyProposal(db, project, { node_id: n.id }, [{ action: "sign", args: {} }])).toThrow(/can't "sign"/);
     expect(() => applyProposal(db, project, { node_id: n.id }, [{ action: "add_node", args: { title: "X", stage: "approved" } }])).toThrow(/stage/);
     expect(() => applyProposal(db, project, { node_id: n.id }, [])).toThrow(/nothing to apply/);
+  });
+});
+
+describe("one proposal per node", () => {
+  it("splits a bundled proposal by node, keeping order and grouping each node's actions", () => {
+    const parts = splitByNode({
+      title: "Going live plan",
+      detail: "why",
+      actions: [
+        { action: "write_intent", args: { node: "Game/Going live", text: "overview" } },
+        { action: "add_node", args: { title: "Costs", parent: "Game/Going live" } },
+        { action: "write_intent", args: { node: "Game/Going live/Costs", text: "costs" } },
+        { action: "add_node", args: { title: "Deploys", parent: "Game/Going live" } },
+        { action: "chase", args: { node: "Game/Going live/Costs", text: "check prices", due: "2026-11-08" } },
+        { action: "write_intent", args: { node: "Game/Going live/Deploys", text: "deploys" } },
+        { action: "link", args: { from: "Game/Going live/Deploys", to: "Game/Going live/Costs", type: "affects" } },
+      ],
+    });
+    expect(parts.map((p) => p.title)).toEqual(["Going live", "New: Costs", "New: Deploys"]);
+    expect(parts[1].actions.map((a) => a.action)).toEqual(["add_node", "write_intent", "chase"]);
+    expect(parts[2].actions.map((a) => a.action)).toEqual(["add_node", "write_intent", "link"]);
+    expect(parts[0].detail).toBe("why");
+  });
+
+  it("leaves a one-node proposal alone", () => {
+    const p = { title: "Mines", detail: "", actions: [{ action: "write_intent", args: { node: "Mines", text: "x" } }, { action: "resolve_question", args: { question: 1, outcome: "answered" } }] };
+    expect(splitByNode(p)).toEqual([p]);
+  });
+
+  it("links the talk from every node a proposal creates or rewrites", () => {
+    const db = openDb(":memory:");
+    const project = { name: "Game", path: "/x" };
+    const live = addNode(db, { project: "Game", title: "Going live" }, HUMAN);
+    applyProposal(db, project, { id: "t1", node_id: null }, [
+      { action: "add_node", args: { title: "Costs", parent: live.id, stage: "idea" } },
+      { action: "write_intent", args: { node: "Going live/Costs", text: "A budget." } },
+    ]);
+    const rows = db.prepare("SELECT n.title, s.ref FROM design_sources s JOIN design_nodes n ON n.id = s.node_id").all() as { title: string; ref: string }[];
+    expect(rows).toEqual([{ title: "Costs", ref: "/design/talk/t1" }]);
   });
 });

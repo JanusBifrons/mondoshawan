@@ -133,12 +133,14 @@ export function talkBrief(opts: {
       : ``,
     `Also useful: \`${cli("tree")}\`, \`${cli("gaps")}\`. The design CLI is read-only for you.`,
     `${project.name}'s code is at ${toNativePath(project.path)}. Read it when it helps; never change any file. ${mergedCodeRule(project)}`,
-    `Your job is to make sure what's decided fits the rest of the design: check the nodes it connects to, and ask about connecting systems and anywhere you'd otherwise be assuming. Don't silently fill gaps.`,
-    `Be sensible and measured. Nothing will be perfect: only raise what changes how the thing works or how it fits with other parts. When the remaining points are small, or a matter of taste, say so, suggest a sensible default, and wrap up rather than digging further into detail.`,
-    `Replies: plain English, no jargon or code names, and to the point. Ask at most one question per reply, with options and your recommendation.`,
-    `The bible is the record; this chat is not kept anywhere else. Nothing said in the talk may be lost: every fact, figure, option, decision, constraint and open question that came up (from the owner or from you) must end up in the bible, in a node's Intent, a question or a to-do. Replies can be brief, but proposals must be thorough.`,
-    `Break big topics down. Something large (e.g. "going live") is several distinct parts: propose a parent node and a few child nodes, one per distinct part, each with its own full Intent: what it is and what it's for, what's decided, the options and figures discussed (with caveats like "unverified"), what it depends on, and what's still open. Intent can be long and structured (short headings and bullets); thorough beats short. Concrete next steps become to-dos ("chase": {"node","text","due":"YYYY-MM-DD","waiting_on":"you"|"you_at_pc"|"agent"|"other"}); open choices become questions ("ask") on the node they belong to; links between nodes ("link") where one affects another.`,
-    `You can't write to the bible yourself. To change it, add proposals. Each proposal is a one-line title, "detail" (one or two lines on why: the card shows the actions themselves, so don't repeat them there), and the actions to apply it (action + its design-CLI arguments as a JSON object string, e.g. {"node":"${node?.id ?? "<id>"}","text":"..."}). Allowed actions: ${PROPOSAL_ACTIONS.join(", ")}. A new node always gets its Intent in the same proposal: add_node, then write_intent with the new node's title path as "node" (e.g. "Parent/New node"). Use one proposal per node or distinct change, so the owner can approve them one by one. Mondo applies a proposal only when the owner taps Approve, and tells you at the start of their next message what they approved or skipped. Don't re-propose something they skipped unless they ask.`,
+    `**Your goal is a developed design, not notes.** What the owner says is raw material. Your output is a design: concrete statements of how the thing works (the rules, flows, states, numbers, limits and edge cases, and how it connects to other nodes), developed far enough that someone could build it, and the owner can point at one part and say "that's wrong". A list of ideas, options and open questions is not a design.`,
+    `**Make the calls.** Where the owner hasn't decided, choose the most sensible option yourself and write it as the design, with a short reason ("Production is updated by hand, not on every merge, because ..."). Don't leave choices open just because they're undecided: the owner will correct the parts they disagree with. Raise a question ("ask") only for a choice that is big, hard to reverse, and has no sensible default (at most two per talk), and even then write the design around your recommended option.`,
+    `Check fit as you go: read the nodes it connects to and make the design consistent with them; if it changes another node, say so and propose that change too. Be measured: specify what matters to how it works and fits, and leave pure taste (exact colours, wording, tuning numbers) as a stated default rather than a discussion.`,
+    `**Size it to the idea.** A small idea is one node. A large one is a parent node (the overview: what it is, what it's for, how the parts fit together) plus one child node per distinct part, and grandchildren where a part is itself large. Keep each node to one thing, so it can be judged and approved on its own.`,
+    `**How to write a node's Intent:** one or two sentences on what it is and what it's for, then short headed sections with specific statements, such as "How it works", "Rules", "Numbers", "Connections" ([[links]] to other nodes), "Not in scope" and "Why" (the reasons for the main calls). Fold in every fact, figure, constraint and preference from the talk where it belongs, so nothing said is lost. Mark figures you couldn't verify as estimates. The talk itself is kept and linked from every node it shapes, as the raw notes.`,
+    `Concrete next steps (checks, experiments, things to find out) become to-dos ("chase": {"node","text","due":"YYYY-MM-DD","waiting_on":"you"|"you_at_pc"|"agent"|"other"}). Use "link" where one node affects or depends on another.`,
+    `Replies: plain English, no jargon or code names, and short: say what you designed and the main calls you made, then at most one question, with options and your recommendation. The design goes in the proposals, not the reply.`,
+    `You can't write to the bible yourself. To change it, add proposals: **one proposal per node**, holding that node's add_node (if new), its write_intent, and its own to-dos, questions and links. List parents before children. Each proposal has a one-line title (the node's name), "detail" (one line on why: the card shows the actions themselves) and the actions to apply it (action + its design-CLI arguments as a JSON object string, e.g. {"node":"${node?.id ?? "<id>"}","text":"..."}). Allowed actions: ${PROPOSAL_ACTIONS.join(", ")}. A new node's write_intent uses its title path as "node" (e.g. "Parent/New node"). Mondo applies a proposal only when the owner taps Approve, and tells you at the start of their next message what they approved, skipped or want changed. Don't re-propose something they skipped unless they ask; when they want a change, propose the corrected node.`,
     `Anything you propose must be plain English that needs zero context, and must link other nodes it mentions with [[Title]] or [[Parent/Title|label]]. Intent is a draft until the owner signs it; never propose stages beyond "idea" or "proposed".`,
     question
       ? `When you agree on the answer, put it all in one proposal: the Intent change (write_intent) and closing the question (resolve_question with {"question":${question.id},"outcome":"answered","answer":"<one-line agreed answer>"}). Raise new questions the talk uncovered with "ask".`
@@ -147,6 +149,48 @@ export function talkBrief(opts: {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+type RawProposal = Omit<Proposal, "status" | "error">;
+
+/** Which node an action is about: the last part of its title path (or its id). Null when it isn't about one node. */
+function actionNode(a: TalkAction): string | null {
+  const str = (k: string) => (typeof a.args[k] === "string" ? (a.args[k] as string).trim() : "");
+  let ref = "";
+  if (a.action === "add_node") ref = str("title");
+  else if (a.action === "ensure") ref = str("path");
+  else if (a.action === "link") ref = str("from");
+  else if (a.action !== "resolve_question") ref = str("node");
+  const last = ref.split("/").map((s) => s.trim()).filter(Boolean).at(-1);
+  return last ? last.toLowerCase() : null;
+}
+
+/**
+ * One proposal per node (the owner's rule: each part can be approved or skipped on its own).
+ * An agent that bundles several nodes into one proposal gets it split here, keeping order, so
+ * parents still come before children. Actions about no particular node stay with the first. Pure.
+ */
+export function splitByNode(p: RawProposal): RawProposal[] {
+  const groups: { key: string | null; actions: TalkAction[]; name: string | null }[] = [];
+  for (const a of p.actions) {
+    const key = actionNode(a);
+    let g = key === null ? groups[0] : groups.find((x) => x.key === key);
+    if (!g) {
+      g = { key, actions: [], name: null };
+      groups.push(g);
+    }
+    g.actions.push(a);
+    if (a.action === "add_node" && typeof a.args.title === "string") g.name = a.args.title;
+    else if (!g.name && a.action === "write_intent" && typeof a.args.node === "string" && a.args.node.includes("/")) {
+      g.name = a.args.node.split("/").at(-1)!.trim();
+    }
+  }
+  if (groups.length <= 1) return [p];
+  return groups.map((g, i) => ({
+    title: g.name ? `${g.actions.some((a) => a.action === "add_node") ? "New: " : ""}${g.name}` : i === 0 ? p.title : `${p.title} (part ${i + 1})`,
+    detail: i === 0 ? p.detail : "",
+    actions: g.actions,
+  }));
 }
 
 /** Parse a turn's structured result into reply + proposals. Pure. */
@@ -169,7 +213,7 @@ export function parseTalkResult(result: Record<string, unknown> | null): { reply
       } else if (y.args && typeof y.args === "object") args = y.args as Record<string, unknown>;
       return typeof y.action === "string" ? [{ action: y.action, args }] : [];
     });
-    return [{ title: String(x.title ?? "Proposed change"), detail: String(x.detail ?? ""), actions }];
+    return splitByNode({ title: String(x.title ?? "Proposed change"), detail: String(x.detail ?? ""), actions });
   });
   return { reply: typeof result.reply === "string" ? result.reply : null, proposals, settled: result.settled === true };
 }
@@ -337,7 +381,7 @@ export function decide(db: DB, project: ProjectConfig, talkId: string, jobId: st
 }
 
 /** Check every action first, then apply them all in one transaction (all or nothing). */
-export function applyProposal(db: DB, project: ProjectConfig, talk: { node_id: string | null }, actions: TalkAction[]) {
+export function applyProposal(db: DB, project: ProjectConfig, talk: { id?: string; node_id: string | null }, actions: TalkAction[]) {
   if (!actions.length) throw new DesignError("this proposal has nothing to apply");
   for (const a of actions) {
     if (!(PROPOSAL_ACTIONS as readonly string[]).includes(a.action)) throw new DesignError(`a talk can't "${a.action}"`, 403);
@@ -352,7 +396,31 @@ export function applyProposal(db: DB, project: ProjectConfig, talk: { node_id: s
       }
       runAction(db, project.name, { ...args, action: a.action }, HUMAN);
     }
+    if (talk.id) linkTalk(db, project, talk.id, actions);
   });
+}
+
+/** Link the talk (the raw notes) from every node a proposal created or rewrote, once per node. */
+function linkTalk(db: DB, project: ProjectConfig, talkId: string, actions: TalkAction[]) {
+  const ref = `/design/talk/${talkId}`;
+  const str = (a: TalkAction, k: string) => (typeof a.args[k] === "string" ? (a.args[k] as string) : "");
+  const refs = actions.flatMap((a) => {
+    if (a.action === "write_intent") return [str(a, "node")];
+    if (a.action === "ensure") return [str(a, "path")];
+    if (a.action === "add_node") {
+      const parent = str(a, "parent");
+      const parentNode = parent ? resolveNode(db, project.name, parent) : null;
+      if (!parentNode) return [str(a, "title")];
+      const path = getNodeDetail(db, parentNode.id).path.map((p) => p.title);
+      return [[...path, str(a, "title")].join("/")];
+    }
+    return [];
+  });
+  for (const r of new Set(refs.filter(Boolean))) {
+    const n = resolveNode(db, project.name, r);
+    if (!n || db.prepare("SELECT 1 FROM design_sources WHERE node_id = ? AND ref = ?").get(n.id, ref)) continue;
+    addSource(db, n.id, { ref, title: "Design talk (the notes behind this)" }, HUMAN);
+  }
 }
 
 function turnView(db: DB, r: Row): TalkTurn {
