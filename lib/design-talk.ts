@@ -53,6 +53,8 @@ export interface TalkTurn {
   progress: string | null;
   reply: string | null;
   proposals: Proposal[];
+  /** The options of a multiple-choice question in the reply, shown as buttons that answer it. */
+  choices: string[];
   /** Further proposals the agent made this turn that Mondo held back (one card at a time). */
   held: number;
   settled: boolean;
@@ -124,8 +126,13 @@ export const TALK_SCHEMA = {
       },
     },
     settled: { type: "boolean", description: "True when every aspect in the plan is locked down or dropped." },
+    choices: {
+      type: "array",
+      items: { type: "string" },
+      description: "When your reply asks a question with options: each option as a short answer the owner can tap (recommended first). Empty otherwise.",
+    },
   },
-  required: ["reply", "proposals", "settled"],
+  required: ["reply", "proposals", "settled", "choices"],
   additionalProperties: false,
 };
 
@@ -165,6 +172,7 @@ export function talkBrief(opts: {
     `**What a proposed node holds:** a developed design, not notes: concrete statements of how it works (rules, flows, states, numbers, limits, edge cases, connections), so the owner can point at one part and say "that's wrong". Write the Intent as one or two sentences on what it is and what it's for, then short headed sections such as "How it works", "Rules", "Numbers", "Connections" ([[links]] to other nodes), "Not in scope" and "Why". Fold in everything the owner said about this aspect, so nothing is lost; mark figures you couldn't verify as estimates. The talk itself is kept and linked from every node it shapes, as the raw notes.`,
     `Check fit as you go: make each aspect consistent with the nodes it connects to; if it changes another node, say so and make that its own aspect. Be measured: settle what matters to how it works and fits, and leave pure taste (colours, wording, tuning numbers) as a stated default. Know when to stop: once the remaining points are small, say so and wrap up.`,
     `A proposal holds one node: its add_node (if new; list a parent before its children, across turns), its write_intent, and only the to-dos ("chase": {"node","text","due":"YYYY-MM-DD","waiting_on":"you"|"you_at_pc"|"agent"|"other"}), questions ("ask") and links ("link": {"from","to","type"}, type one of ${LINK_TYPES.join(", ")}) that belong to it. Give it a one-line title (the node's name), "detail" (one line on why: the card shows the actions themselves) and the actions (action + its design-CLI arguments as a JSON object string, e.g. {"node":"${node?.id ?? "<id>"}","text":"..."}). Allowed actions: ${PROPOSAL_ACTIONS.join(", ")}. A new node's write_intent uses its title path as "node" (e.g. "Parent/New node"). You can't write to the bible yourself: Mondo applies a proposal only when the owner approves it (either way), and tells you at the start of the next turn what they did with it. Don't re-propose something they skipped unless they ask; when they ask for a change, propose the corrected node.`,
+    `When you ask a question with options, also list the options in "choices" as short answers the owner can tap, each one making sense on its own as their reply (e.g. "Option 2: owners set the rate, capped at 15%"), your recommendation first and marked "(recommended)". Leave "choices" empty when you aren't asking.`,
     `Replies: plain English, no jargon or code names, short and conversational. The design goes in the proposal, not the reply.`,
     `Anything you propose must be plain English that needs zero context, and must link other nodes it mentions with [[Title]] or [[Parent/Title|label]]. Never propose stages beyond "idea" or "proposed"; approving is the owner's.`,
     question
@@ -235,8 +243,9 @@ export function parseTalkResult(result: Record<string, unknown> | null): {
   proposals: RawProposal[];
   held: number;
   settled: boolean;
+  choices: string[];
 } {
-  if (!result) return { reply: null, proposals: [], held: 0, settled: false };
+  if (!result) return { reply: null, proposals: [], held: 0, settled: false, choices: [] };
   const proposals = (Array.isArray(result.proposals) ? result.proposals : []).flatMap((p) => {
     if (!p || typeof p !== "object") return [];
     const x = p as Record<string, unknown>;
@@ -262,6 +271,10 @@ export function parseTalkResult(result: Record<string, unknown> | null): {
     proposals: proposals.slice(0, 1),
     held: Math.max(0, proposals.length - 1),
     settled: result.settled === true,
+    choices: (Array.isArray(result.choices) ? result.choices : [])
+      .filter((c): c is string => typeof c === "string" && !!c.trim())
+      .map((c) => c.trim().slice(0, 300))
+      .slice(0, 6),
   };
 }
 
@@ -644,6 +657,7 @@ function turnView(db: DB, r: Row): TalkTurn {
     held: parsed.held,
     proposals: parsed.proposals.map((p, i) => ({ ...p, status: decided.get(i)?.status ?? "pending", error: decided.get(i)?.error ?? null, note: decided.get(i)?.note ?? null })),
     settled: parsed.settled,
+    choices: parsed.choices,
     error: job?.error ?? (job ? null : "This reply's record is missing."),
     tokens: job && job.status !== "running" ? (job.inputTokens ?? 0) + (job.outputTokens ?? 0) + (job.cacheWriteTokens ?? 0) : null,
     durationMs: job?.durationMs ?? null,

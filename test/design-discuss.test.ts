@@ -77,7 +77,7 @@ describe("talk replies and proposals", () => {
       { action: "write_intent", args: { node: "n1", text: "x" } },
       { action: "ask", args: {} },
     ]);
-    expect(parseTalkResult(null)).toEqual({ reply: null, proposals: [], held: 0, settled: false });
+    expect(parseTalkResult(null)).toEqual({ reply: null, proposals: [], held: 0, settled: false, choices: [] });
   });
 
   it("applies an approved proposal as the owner, all or nothing", () => {
@@ -282,5 +282,13 @@ describe("finding nodes the way agents name them", () => {
     // ensure creates a new top-level "Robot territory" rather than reusing the nested one.
     runAction(db, "Game", { action: "ensure", path: "Robot territory" }, AGENT);
     expect(db.prepare("SELECT COUNT(*) n FROM design_nodes WHERE title = 'Robot territory'").get()).toEqual({ n: 2 });
+  });
+});
+
+describe("multiple-choice answers", () => {
+  it("reads the options as tappable answers", () => {
+    const r = parseTalkResult({ reply: "Who sets it?", proposals: [], settled: false, choices: ["Option 2: owners, capped (recommended)", " ", 7, "Option 1: fixed"] });
+    expect(r.choices).toEqual(["Option 2: owners, capped (recommended)", "Option 1: fixed"]);
+    expect(parseTalkResult({ reply: "x", proposals: [], settled: false }).choices).toEqual([]);
   });
 });
