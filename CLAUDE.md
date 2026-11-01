@@ -6,6 +6,10 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
 - This folder (`Projects/mondoshawan/mondoshawan`) is the git repo. The outer `Projects/mondoshawan/` wrapper holds large material that stays out of the repo, the same pattern as `eqx-net/eqx-net`.
 - `app/`: Next.js App Router (UI + API routes). `lib/`: server logic (config, paths, git, matching, store). `hooks/mondo-hook.js`: the Claude Code hook. `scripts/`: CLI helpers. `electron/`: desktop window.
 
+## Working on this repo
+- **Each agent works in its own branch and git worktree and opens a PR into `main`.** Never commit straight to `main` in the main checkout: several sessions often run at once. Commit and push freely on your branch.
+- Remote: github.com/JanusBifrons/mondoshawan. Open PRs with `gh pr create`.
+
 ## Decisions (do not undo without discussion)
 - **Next.js is the app; Electron is just a window.** Electron starts the Next server if nothing answers on the port, then loads it. The server must stay runnable alone (`npm run server`) for Phase 3 (phone over LAN).
 - **Bind 127.0.0.1:4317 by default.** Host and port come from `MONDO_HOST`/`MONDO_PORT`, then from `mondo.config.json` `server`.
