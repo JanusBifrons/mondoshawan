@@ -262,4 +262,6 @@ export const DESIGN_SCHEMA = `
  */
 export const DESIGN_COLUMNS: readonly { table: string; column: string; ddl: string }[] = [
   { table: "design_nodes", column: "priority", ddl: "TEXT NOT NULL DEFAULT 'normal'" },
+  // The Claude session id of the agent the owner is talking a question through with.
+  { table: "design_questions", column: "discussion", ddl: "TEXT" },
 ];

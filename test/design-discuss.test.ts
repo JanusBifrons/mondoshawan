@@ -46,3 +46,32 @@ describe("design discussion brief", () => {
     expect(b).toContain(`stage "idea"`);
   });
 });
+
+describe("talking a question through", () => {
+  const project = { name: "EQX-Net", path: "C:/Users/a/eqx-net/eqx-net" };
+  const node = { id: "n1", path: "Weapons › Mines" };
+
+  it("briefs on the question, keeps it measured, and closes non-blocking ones itself", () => {
+    const b = discussBrief({ project, node, agentName: "q-mines", mondoPath: "C:\mondo", question: { id: 7, text: "Can mines be shot down?", blocking: false } });
+    expect(b).toContain(`(question 7): "Can mines be shot down?"`);
+    expect(b).toContain("matter of taste");
+    expect(b).toContain(`resolve_question '{"question":7,"outcome":"answered"`);
+  });
+
+  it("leaves closing a blocking question to the owner", () => {
+    const b = discussBrief({ project, node, agentName: "q-mines", mondoPath: "C:\mondo", question: { id: 7, text: "Can mines be shot down?", blocking: true } });
+    expect(b).toContain("only the owner can close it");
+    expect(b).not.toContain("resolve_question");
+  });
+
+  it("records which agent is discussing a question", async () => {
+    const { setQuestionDiscussion, getQuestion } = await import("@/lib/design");
+    const db = openDb(":memory:");
+    const n = addNode(db, { project: "Game", title: "Mines" }, HUMAN);
+    const q = askQuestion(db, n.id, { text: "Can mines be shot down?" }, AGENT);
+    expect(q.discussion).toBeNull();
+    setQuestionDiscussion(db, q.id, "sess-1");
+    expect(getQuestion(db, q.id)?.discussion).toBe("sess-1");
+    expect(listOpenQuestions(db, "Game")[0].discussion).toBe("sess-1");
+  });
+});

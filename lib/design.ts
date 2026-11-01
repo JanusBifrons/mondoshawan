@@ -171,6 +171,8 @@ export interface Question {
   createdAt: number;
   resolvedBy: Actor | null;
   resolvedAt: number | null;
+  /** Claude session id of the agent discussing it with the owner, if one was started. */
+  discussion: string | null;
 }
 
 export interface Link {
@@ -294,6 +296,7 @@ const toQuestion = (r: any): Question => ({
   createdAt: r.created_at,
   resolvedBy: r.resolved_by,
   resolvedAt: r.resolved_at,
+  discussion: r.discussion ?? null,
 });
 
 const toLink = (r: any): Link => ({
@@ -789,6 +792,21 @@ export function askQuestion(
     log(db, node.project, nodeId, actor, "question_raised", { question: Number(r.lastInsertRowid), blocking: !!input.blocking });
     return toQuestion(db.prepare("SELECT * FROM design_questions WHERE id = ?").get(r.lastInsertRowid));
   });
+}
+
+/** Open question by id (for starting a discussion on it). */
+export function getQuestion(db: DB, questionId: number): Question | null {
+  const row = db.prepare("SELECT * FROM design_questions WHERE id = ?").get(questionId);
+  return row ? toQuestion(row) : null;
+}
+
+/** Record which agent is talking a question through with the owner. */
+export function setQuestionDiscussion(db: DB, questionId: number, sessionId: string): void {
+  db.prepare("UPDATE design_questions SET discussion = ? WHERE id = ?").run(sessionId, questionId);
+  const row = db
+    .prepare("SELECT n.project, n.id FROM design_questions q JOIN design_nodes n ON n.id = q.node_id WHERE q.id = ?")
+    .get(questionId) as { project: string; id: string } | undefined;
+  if (row) log(db, row.project, row.id, HUMAN, "question_discussed", { question: questionId, session: sessionId });
 }
 
 export function resolveQuestion(db: DB, questionId: number, outcomeIn: unknown, answer: unknown, actor: Actor): Question {

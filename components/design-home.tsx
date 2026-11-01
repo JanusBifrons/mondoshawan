@@ -61,6 +61,11 @@ export function QuestionCards({
                 {showProject && <span>{q.project} ›</span>}
                 <span className="text-foreground">{q.nodeTitle}</span>
                 {q.blocking && <span className="rounded-sm bg-taxi px-1 text-[0.65rem] font-bold text-black">BLOCKING</span>}
+                {q.discussion && (
+                  <span className="flex items-center gap-1 text-leeloo">
+                    <MessagesSquare className="size-3" /> being talked through
+                  </span>
+                )}
               </div>
               <p className="text-sm">{q.text}</p>
               <p className="readout normal-case">
