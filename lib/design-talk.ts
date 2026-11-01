@@ -3,6 +3,7 @@ import type { ProjectConfig } from "./config";
 import { tx, type DB } from "./db";
 import { DesignError, HUMAN, addSource, getNodeDetail, getQuestion, resolveNode, setQuestionDiscussion, setStage, signIntent } from "./design";
 import { runAction } from "./design-actions";
+import { LINK_TYPES } from "./design-meta";
 import { mergedCodeRule, mondoFolder } from "./design-discuss";
 import { getJobs, type Job } from "./jobs";
 import { toNativePath } from "./paths";
@@ -150,7 +151,7 @@ export function talkBrief(opts: {
     `**At most one proposal per reply,** and only for an aspect that has been discussed and is solid enough to build from. Mondo shows only one card at a time. The owner decides each card: **Approve** (to be added to the game: saved, Intent signed, stage approved), **Approve as idea** (a good idea, saved but kept as an idea: not for development without further review), a **tweak** to one part (nothing saved; make exactly that change, keep the rest, and propose the corrected card), or **Skip**. That's their call, not yours. After each decision Mondo sends you a turn straight away: carry on with the next aspect without waiting to be asked.`,
     `**What a proposed node holds:** a developed design, not notes: concrete statements of how it works (rules, flows, states, numbers, limits, edge cases, connections), so the owner can point at one part and say "that's wrong". Write the Intent as one or two sentences on what it is and what it's for, then short headed sections such as "How it works", "Rules", "Numbers", "Connections" ([[links]] to other nodes), "Not in scope" and "Why". Fold in everything the owner said about this aspect, so nothing is lost; mark figures you couldn't verify as estimates. The talk itself is kept and linked from every node it shapes, as the raw notes.`,
     `Check fit as you go: make each aspect consistent with the nodes it connects to; if it changes another node, say so and make that its own aspect. Be measured: settle what matters to how it works and fits, and leave pure taste (colours, wording, tuning numbers) as a stated default. Know when to stop: once the remaining points are small, say so and wrap up.`,
-    `A proposal holds one node: its add_node (if new; list a parent before its children, across turns), its write_intent, and only the to-dos ("chase": {"node","text","due":"YYYY-MM-DD","waiting_on":"you"|"you_at_pc"|"agent"|"other"}), questions ("ask") and links ("link") that belong to it. Give it a one-line title (the node's name), "detail" (one line on why: the card shows the actions themselves) and the actions (action + its design-CLI arguments as a JSON object string, e.g. {"node":"${node?.id ?? "<id>"}","text":"..."}). Allowed actions: ${PROPOSAL_ACTIONS.join(", ")}. A new node's write_intent uses its title path as "node" (e.g. "Parent/New node"). You can't write to the bible yourself: Mondo applies a proposal only when the owner approves it (either way), and tells you at the start of the next turn what they did with it. Don't re-propose something they skipped unless they ask; when they ask for a change, propose the corrected node.`,
+    `A proposal holds one node: its add_node (if new; list a parent before its children, across turns), its write_intent, and only the to-dos ("chase": {"node","text","due":"YYYY-MM-DD","waiting_on":"you"|"you_at_pc"|"agent"|"other"}), questions ("ask") and links ("link": {"from","to","type"}, type one of ${LINK_TYPES.join(", ")}) that belong to it. Give it a one-line title (the node's name), "detail" (one line on why: the card shows the actions themselves) and the actions (action + its design-CLI arguments as a JSON object string, e.g. {"node":"${node?.id ?? "<id>"}","text":"..."}). Allowed actions: ${PROPOSAL_ACTIONS.join(", ")}. A new node's write_intent uses its title path as "node" (e.g. "Parent/New node"). You can't write to the bible yourself: Mondo applies a proposal only when the owner approves it (either way), and tells you at the start of the next turn what they did with it. Don't re-propose something they skipped unless they ask; when they ask for a change, propose the corrected node.`,
     `Replies: plain English, no jargon or code names, short and conversational. The design goes in the proposal, not the reply.`,
     `Anything you propose must be plain English that needs zero context, and must link other nodes it mentions with [[Title]] or [[Parent/Title|label]]. Never propose stages beyond "idea" or "proposed"; approving is the owner's.`,
     question
@@ -434,9 +435,10 @@ export function decide(
   if (!turn) throw new DesignError("no such reply in this talk", 404);
   const p = parseTalkResult(getJobs().get(jobId)?.result ?? null).proposals[idx];
   if (!p) throw new DesignError("no such proposal", 404);
-  if (db.prepare("SELECT 1 FROM design_talk_decisions WHERE job_id = ? AND idx = ?").get(jobId, idx)) {
-    throw new DesignError("already decided");
-  }
+  const prior = db.prepare("SELECT status FROM design_talk_decisions WHERE job_id = ? AND idx = ?").get(jobId, idx) as { status: string } | undefined;
+  if (prior && prior.status !== "failed") throw new DesignError("already decided");
+  // A failed save can be decided again (retry, tweak or skip).
+  if (prior) db.prepare("DELETE FROM design_talk_decisions WHERE job_id = ? AND idx = ?").run(jobId, idx);
   let status: Proposal["status"] =
     decision === "skip"
       ? "skipped"
@@ -498,6 +500,8 @@ export function applyProposal(
   tx(db, () => {
     for (const a of actions) {
       const args = { ...a.args };
+      // Agents sometimes leave a link's type out; "affects" is the safe default rather than failing the card.
+      if (a.action === "link" && (typeof args.type !== "string" || !(LINK_TYPES as readonly string[]).includes(args.type))) args.type = "affects";
       if (args.node === undefined && talk.node_id && a.action !== "resolve_question" && a.action !== "add_node" && a.action !== "ensure") {
         args.node = talk.node_id;
       }

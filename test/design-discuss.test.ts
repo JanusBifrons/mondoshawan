@@ -103,6 +103,15 @@ describe("talk replies and proposals", () => {
     expect(listOpenQuestions(db, "Game")).toHaveLength(0);
   });
 
+  it("gives a link with no type the default 'affects' instead of failing the card", () => {
+    const db = openDb(":memory:");
+    const project = { name: "Game", path: "/x" };
+    addNode(db, { project: "Game", title: "Ships" }, HUMAN);
+    const names = addNode(db, { project: "Game", title: "Ship names" }, HUMAN);
+    applyProposal(db, project, { node_id: names.id }, [{ action: "link", args: { from: "Ship names", to: "Ships" } }]);
+    expect(db.prepare("SELECT type FROM design_links").get()).toEqual({ type: "affects" });
+  });
+
   it("refuses changes a talk may not make", () => {
     const db = openDb(":memory:");
     const project = { name: "Game", path: "/x" };

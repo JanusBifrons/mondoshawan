@@ -150,7 +150,7 @@ function ProposalCard({
       </div>
       {p.note && <p className="text-sm italic text-muted-foreground">Your tweak: {p.note}</p>}
       {p.error && <p className="text-xs text-taxi">{p.error}</p>}
-      {p.status === "pending" && (
+      {(p.status === "pending" || p.status === "failed") && (
         <div className="space-y-2 border-t border-border/60 pt-2">
           <div className="flex flex-wrap gap-2">
             <Button size="sm" disabled={busy} onClick={() => onDecide("approve")} title="To be added to the game: saves it and signs the Intent">
