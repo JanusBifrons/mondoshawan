@@ -9,6 +9,13 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
 ## Working on this repo
 - **Each agent works in its own branch and git worktree and opens a PR into `main`.** Never commit straight to `main` in the main checkout: several sessions often run at once. Commit and push freely on your branch.
 - Remote: github.com/JanusBifrons/mondoshawan. Open PRs with `gh pr create`.
+- **CI and auto-merge:**
+  - **CI** (`.github/workflows/ci.yml`, job `verify`) runs typecheck, tests and `next build` on every PR and on pushes to `main`. `main` is protected: a PR can only merge once `verify` passes.
+  - **Every PR merges itself once it's green.** `.github/workflows/auto-merge.yml` turns on auto-merge (merge commit, branch deleted) when a PR opens. To be safe, also run `gh pr merge <n> --auto --merge` right after `gh pr create`.
+  - To hold a PR back, open it as a draft, or run `gh pr merge <n> --disable-auto`.
+  - Run `npm run typecheck && npm test` before pushing, so CI isn't the first to find a failure.
+  - If `main` moves while your PR is open, merge it in (`git fetch origin && git merge origin/main`), re-run the checks and push. Don't rebase a pushed branch.
+- **Durable rules go in this file, not in Claude's per-machine memory.** Memory doesn't follow the user between machines.
 
 ## Decisions (do not undo without discussion)
 - **Next.js is the app; Electron is just a window.** Electron starts the Next server if nothing answers on the port, then loads it. The server must stay runnable alone (`npm run server`) for Phase 3 (phone over LAN).
