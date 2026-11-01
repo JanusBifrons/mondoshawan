@@ -1,3 +1,4 @@
+import { findNodeRef } from "./design-links";
 import crypto from "node:crypto";
 import { tx, type DB } from "./db";
 
@@ -448,7 +449,28 @@ export function getNodeDetail(db: DB, id: string): NodeDetail {
 }
 
 /** Find a node by id, or by a title path like "Weapons/Missiles" (case-insensitive). */
-export function resolveNode(db: DB, project: string, ref: string): NodeRow | null {
+/**
+ * A node by id or title path ("Weapons/Missiles"). An exact path from the top wins; failing that, a
+ * title or the end of a path ("Missiles", "Factions & living world") is accepted when it matches
+ * exactly one node, the same as [[links]] in design text. `exact` turns that off (used when
+ * creating missing nodes along a path, so a new node never lands under the wrong parent).
+ */
+export function resolveNode(db: DB, project: string, ref: string, opts: { exact?: boolean } = {}): NodeRow | null {
+  const exact = resolveExact(db, project, ref);
+  if (exact || opts.exact) return exact;
+  const rows = db.prepare("SELECT id, parent_id, title FROM design_nodes WHERE project = ?").all(project) as {
+    id: string;
+    parent_id: string | null;
+    title: string;
+  }[];
+  const hit = findNodeRef(
+    rows.map((r) => ({ id: r.id, parentId: r.parent_id, title: r.title })),
+    ref,
+  );
+  return hit ? getNodeRow(db, hit.id) : null;
+}
+
+function resolveExact(db: DB, project: string, ref: string): NodeRow | null {
   const byId = getNodeRow(db, ref);
   if (byId && byId.project === project) return byId;
   const parts = ref.split("/").map((s) => s.trim().toLowerCase()).filter(Boolean);

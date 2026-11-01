@@ -130,8 +130,8 @@ export function KnowledgeBrowser({ sources, showProject = false }: { sources: Kn
             <TableRow>
               <TableHead className="readout pl-4">Title</TableHead>
               {showProject && <TableHead className="readout">Project</TableHead>}
-              <TableHead className="readout">Category</TableHead>
-              <TableHead className="readout">Source</TableHead>
+              <TableHead className="readout hidden sm:table-cell">Category</TableHead>
+              <TableHead className="readout hidden sm:table-cell">Source</TableHead>
               <TableHead className="readout pr-4 text-right">Updated</TableHead>
             </TableRow>
           </TableHeader>
@@ -158,10 +158,10 @@ export function KnowledgeBrowser({ sources, showProject = false }: { sources: Kn
                   {s.summary && <p className="truncate text-xs text-muted-foreground">{s.summary}</p>}
                 </TableCell>
                 {showProject && <TableCell className="text-muted-foreground">{s.project}</TableCell>}
-                <TableCell>
+                <TableCell className="hidden sm:table-cell">
                   <Badge variant="outline" className="rounded-sm border-brass/40 text-brass">{s.category}</Badge>
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden sm:table-cell">
                   <span className="flex items-center gap-1.5 text-muted-foreground">
                     <OriginIcon origin={s.origin} />
                     {s.originLabel}

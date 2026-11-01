@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ElementGlyph, type Element } from "@/components/elements";
 import { cn } from "@/lib/utils";
 import {
@@ -809,7 +809,7 @@ function NodePanel({
         )}
       </div>
 
-      <div className="flex gap-1 overflow-x-auto border-b px-2" role="tablist">
+      <div className="flex flex-wrap gap-x-1 border-b px-2" role="tablist">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -1584,7 +1584,18 @@ export function DesignBible({ slug }: { slug: string }) {
         </div>
       ) : (
         <Sheet open={!!selected} onOpenChange={(o) => !o && select(null)}>
-          <SheetContent className="w-full gap-0 overflow-y-auto p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-xl">
+          <SheetContent
+            showCloseButton={false}
+            className="w-full gap-0 overflow-y-auto p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-xl"
+          >
+            {/* Pinned close: stays in the corner however far down a long node you scroll. */}
+            <div className="sticky top-0 z-20 h-0">
+              <SheetClose asChild>
+                <Button variant="outline" size="icon-sm" className="absolute top-3 right-3 bg-background/90 backdrop-blur" aria-label="Close">
+                  <X />
+                </Button>
+              </SheetClose>
+            </div>
             <SheetHeader className="sr-only">
               <SheetTitle>Design node</SheetTitle>
               <SheetDescription>Intent, reality, reviews, questions and links</SheetDescription>

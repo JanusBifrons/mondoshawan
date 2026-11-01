@@ -269,3 +269,16 @@
 .animate-ember {
   animation: ember 1.6s ease-in-out infinite;
 }
+
+/* Long unbroken strings (paths, commands, ids) wrap instead of pushing the page sideways on a phone. */
+@layer base {
+  body {
+    overflow-wrap: anywhere;
+  }
+  pre,
+  code,
+  .font-mono {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+}
