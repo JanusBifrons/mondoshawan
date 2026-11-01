@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { openDb } from "@/lib/db";
 import { HUMAN, addNode, askQuestion, listOpenQuestions, resolveQuestion, setStage } from "@/lib/design";
-import { discussBrief } from "@/lib/design-discuss";
+import { applyProposal, parseTalkResult, talkBrief } from "@/lib/design-talk";
 
 const AGENT = "agent:test";
 
@@ -28,50 +28,78 @@ describe("open design questions", () => {
   });
 });
 
-describe("design discussion brief", () => {
+describe("design talk brief", () => {
   const project = { name: "EQX-Net", path: "C:/Users/a/eqx-net/eqx-net" };
+  const node = { id: "n1", path: "Weapons › Mines" };
+  const brief = (question: { id: number; text: string; blocking: boolean } | null, n: typeof node | null = node) =>
+    talkBrief({ project, node: n, question, agentName: "talk-abc", mondoPath: "C:\mondo" });
 
-  it("briefs on one node: how to read it, read-only code, ask before writing", () => {
-    const b = discussBrief({ project, node: { id: "n1", path: "Weapons › Mines" }, agentName: "design-mines", mondoPath: "C:\\mondo" });
+  it("reads the node, keeps it measured, and can only propose changes", () => {
+    const b = brief(null);
     expect(b).toContain(`"Weapons › Mines" (id n1)`);
-    expect(b).toContain(`npm run -s design -- EQX-Net get '{"node":"n1"}' --as agent:design-mines`);
-    expect(b).toContain("don't change any code");
-    expect(b).toContain("wait for the owner's OK");
-    expect(b).toContain("only the owner does that");
+    expect(b).toContain(`npm run -s design -- EQX-Net get '{"node":"n1"}' --as agent:talk-abc`);
+    expect(b).toContain("never change any file");
+    expect(b).toContain("matter of taste");
+    expect(b).toContain("can't write to the bible yourself");
+    expect(b).toContain("only when the owner taps Approve");
   });
 
-  it("briefs an open discussion to start from the tree and add ideas", () => {
-    const b = discussBrief({ project, node: null, agentName: "design-explore", mondoPath: "C:\\mondo" });
-    expect(b).toContain("possibly something new");
-    expect(b).toContain(`stage "idea"`);
+  it("starts an open talk from the tree", () => {
+    expect(brief(null, null)).toContain(`stage "idea"`);
+  });
+
+  it("on a question, bundles the Intent change and closing it into one proposal", () => {
+    const b = brief({ id: 7, text: "Can mines be shot down?", blocking: true });
+    expect(b).toContain(`(question 7): "Can mines be shot down?"`);
+    expect(b).toContain(`resolve_question with {"question":7`);
   });
 });
 
-describe("talking a question through", () => {
-  const project = { name: "EQX-Net", path: "C:/Users/a/eqx-net/eqx-net" };
-  const node = { id: "n1", path: "Weapons › Mines" };
-
-  it("briefs on the question, keeps it measured, and closes non-blocking ones itself", () => {
-    const b = discussBrief({ project, node, agentName: "q-mines", mondoPath: "C:\mondo", question: { id: 7, text: "Can mines be shot down?", blocking: false } });
-    expect(b).toContain(`(question 7): "Can mines be shot down?"`);
-    expect(b).toContain("matter of taste");
-    expect(b).toContain(`resolve_question '{"question":7,"outcome":"answered"`);
+describe("talk replies and proposals", () => {
+  it("parses the structured reply, including JSON-string args", () => {
+    const r = parseTalkResult({
+      reply: "Agreed.",
+      settled: true,
+      proposals: [{ title: "Update Intent", detail: "New text", actions: [{ action: "write_intent", args: '{"node":"n1","text":"x"}' }, { action: "ask", args: "not json" }] }],
+    });
+    expect(r.reply).toBe("Agreed.");
+    expect(r.settled).toBe(true);
+    expect(r.proposals[0].actions).toEqual([
+      { action: "write_intent", args: { node: "n1", text: "x" } },
+      { action: "ask", args: {} },
+    ]);
+    expect(parseTalkResult(null)).toEqual({ reply: null, proposals: [], settled: false });
   });
 
-  it("leaves closing a blocking question to the owner", () => {
-    const b = discussBrief({ project, node, agentName: "q-mines", mondoPath: "C:\mondo", question: { id: 7, text: "Can mines be shot down?", blocking: true } });
-    expect(b).toContain("only the owner can close it");
-    expect(b).not.toContain("resolve_question");
-  });
-
-  it("records which agent is discussing a question", async () => {
-    const { setQuestionDiscussion, getQuestion } = await import("@/lib/design");
+  it("applies an approved proposal as the owner, all or nothing", () => {
     const db = openDb(":memory:");
+    const project = { name: "Game", path: "/x" };
+    const mines = addNode(db, { project: "Game", title: "Mines" }, HUMAN);
+    const q = askQuestion(db, mines.id, { text: "Can mines be shot down?", blocking: true }, AGENT);
+
+    // Defaults the node to the talk's node; closes even a blocking question (the owner approved it).
+    applyProposal(db, project, { node_id: mines.id }, [
+      { action: "write_intent", args: { text: "Mines can be shot down." } },
+      { action: "resolve_question", args: { question: q.id, outcome: "answered", answer: "Yes" } },
+    ]);
+    expect(listOpenQuestions(db, "Game")).toHaveLength(0);
+
+    // A failing step rolls back the earlier ones.
+    expect(() =>
+      applyProposal(db, project, { node_id: mines.id }, [
+        { action: "ask", args: { text: "Rolled back?" } },
+        { action: "write_intent", args: { node: "Nope", text: "x" } },
+      ]),
+    ).toThrow();
+    expect(listOpenQuestions(db, "Game")).toHaveLength(0);
+  });
+
+  it("refuses changes a talk may not make", () => {
+    const db = openDb(":memory:");
+    const project = { name: "Game", path: "/x" };
     const n = addNode(db, { project: "Game", title: "Mines" }, HUMAN);
-    const q = askQuestion(db, n.id, { text: "Can mines be shot down?" }, AGENT);
-    expect(q.discussion).toBeNull();
-    setQuestionDiscussion(db, q.id, "sess-1");
-    expect(getQuestion(db, q.id)?.discussion).toBe("sess-1");
-    expect(listOpenQuestions(db, "Game")[0].discussion).toBe("sess-1");
+    expect(() => applyProposal(db, project, { node_id: n.id }, [{ action: "sign", args: {} }])).toThrow(/can't "sign"/);
+    expect(() => applyProposal(db, project, { node_id: n.id }, [{ action: "add_node", args: { title: "X", stage: "approved" } }])).toThrow(/stage/);
+    expect(() => applyProposal(db, project, { node_id: n.id }, [])).toThrow(/nothing to apply/);
   });
 });

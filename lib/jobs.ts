@@ -64,6 +64,14 @@ export interface StartJob {
   input?: Record<string, unknown>;
   model?: string;
   effort?: string;
+  /** Carry on an existing conversation (e.g. a design talk's next turn) instead of starting a new one. */
+  resume?: string;
+  /** Use this session id for a new conversation (so later turns can resume it). */
+  sessionId?: string;
+  /** Tools the job may not use at all (e.g. Edit, Write). */
+  disallowedTools?: string[];
+  /** Extra environment variables (e.g. MONDO_DESIGN_READONLY=1). */
+  env?: Record<string, string>;
 }
 
 const parse = <T>(s: string | null, fallback: T): T => {
@@ -156,7 +164,7 @@ export class JobManager extends EventEmitter {
   start(opts: StartJob): Job {
     const d = jobDefaults();
     const id = crypto.randomBytes(6).toString("hex");
-    const sessionId = crypto.randomUUID();
+    const sessionId = opts.resume || opts.sessionId || crypto.randomUUID();
     const model = opts.model || d.model;
     const effort = opts.effort || d.effort;
     const now = Date.now();
@@ -171,7 +179,7 @@ export class JobManager extends EventEmitter {
       "-p",
       "--output-format", "stream-json",
       "--verbose",
-      "--session-id", sessionId,
+      ...(opts.resume ? ["--resume", opts.resume] : ["--session-id", sessionId]),
       "--name", `Mondo job: ${opts.title}`.slice(0, 100),
       "--model", model,
       "--effort", effort,
@@ -180,6 +188,7 @@ export class JobManager extends EventEmitter {
       "--permission-prompts", "none",
       ...(opts.brief ? ["--append-system-prompt", opts.brief] : []),
       ...(opts.schema ? ["--json-schema", JSON.stringify(opts.schema)] : []),
+      ...(opts.disallowedTools?.length ? ["--disallowedTools", opts.disallowedTools.join(",")] : []),
     ];
 
     fs.mkdirSync(jobsDir(), { recursive: true });
@@ -191,7 +200,7 @@ export class JobManager extends EventEmitter {
         detached: true,
         windowsHide: true,
         stdio: ["pipe", out, err],
-        env: agentEnv(),
+        env: { ...agentEnv(), ...(opts.env ?? {}) },
       });
       child.on("error", (e) => this.finishFailed(id, `Couldn't start claude: ${e.message}`));
       child.stdin?.end(opts.prompt);

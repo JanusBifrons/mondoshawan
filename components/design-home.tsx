@@ -118,7 +118,7 @@ function nodeOptions(tree: TreeNode[]) {
 
 /**
  * Start a design conversation with an agent: pick a project and an area (or "something
- * new"), say what's on your mind. It opens as a Mondo agent you talk to in the Claude app.
+ * new"), say what's on your mind. It opens as a design talk inside Mondo.
  */
 export function StartDiscussion({
   projects,
@@ -167,7 +167,7 @@ export function StartDiscussion({
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
-      router.push(`/agents/${encodeURIComponent(d.sessionId)}`);
+      router.push(`/design/talk/${encodeURIComponent(d.talkId)}`);
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
@@ -224,8 +224,8 @@ export function StartDiscussion({
           />
         </label>
         <p className="text-xs text-muted-foreground">
-          An agent reads the design (and the code, read-only), then you talk it through in the Claude app. It asks before
-          writing anything to the design.
+          An agent reads the design (and the code, read-only) and talks it through with you here. Any change it suggests
+          shows as a card you approve before it's saved.
         </p>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <div className="flex gap-2">

@@ -58,15 +58,22 @@ export function getDb(): DB {
   return (g.__mondoDb ??= openDb());
 }
 
-/** Run `fn` inside a transaction. */
+const txDepth = new WeakMap<object, number>();
+
+/** Run `fn` inside a transaction. Nested calls use savepoints, so they roll back with the outer one. */
 export function tx<T>(db: DB, fn: () => T): T {
-  db.exec("BEGIN");
+  const depth = txDepth.get(db) ?? 0;
+  const sp = `mondo_sp${depth}`;
+  db.exec(depth === 0 ? "BEGIN" : `SAVEPOINT ${sp}`);
+  txDepth.set(db, depth + 1);
   try {
     const out = fn();
-    db.exec("COMMIT");
+    db.exec(depth === 0 ? "COMMIT" : `RELEASE ${sp}`);
     return out;
   } catch (err) {
-    db.exec("ROLLBACK");
+    db.exec(depth === 0 ? "ROLLBACK" : `ROLLBACK TO ${sp}; RELEASE ${sp}`);
     throw err;
+  } finally {
+    txDepth.set(db, depth);
   }
 }

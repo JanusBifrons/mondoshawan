@@ -53,6 +53,8 @@ fidelity: ${FIDELITIES.join(" | ")}
 link:     ${LINK_TYPES.join(" | ")}
 outcome:  ${QUESTION_OUTCOMES.join(" | ")}`;
 
+const READ_ONLY_ACTIONS = ["tree", "get", "gaps", "chases"];
+
 function main() {
   const argv = process.argv.slice(2);
   let actor = "agent:cli";
@@ -85,6 +87,14 @@ function main() {
   if (!actionArg || (!isBatch && !(ACTIONS as readonly string[]).includes(action))) {
     console.error(`Unknown action "${action ?? ""}".\n\n${HELP}`);
     process.exit(2);
+  }
+
+  // In a design talk (run by Mondo) the agent may only read: it proposes changes and the owner approves them in Mondo.
+  if (process.env.MONDO_DESIGN_READONLY === "1" && (isBatch || !READ_ONLY_ACTIONS.includes(action))) {
+    console.error(
+      `Error: "${actionArg}" changes the design bible, and in a design talk you can't write. Put it in your proposals instead; the owner approves it in Mondo.`,
+    );
+    process.exit(3);
   }
 
   let args: unknown = {};
