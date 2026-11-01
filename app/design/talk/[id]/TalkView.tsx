@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowLeft, Check, Lightbulb, Loader2, MessagesSquare, PenLine, SearchCheck, Send, Square, X } from "lucide-react";
+import { ArrowLeft, Check, Lightbulb, Loader2, MessagesSquare, PenLine, RotateCcw, SearchCheck, Send, Square, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { fmtDuration, fmtTokens } from "@/components/usage-ui";
 import { Button } from "@/components/ui/button";
@@ -201,7 +201,10 @@ function Turn({
   slug,
   busy,
   decide,
+  retry,
 }: {
+  /** Set on the last turn when it stopped, to ask again. */
+  retry?: () => void;
   t: TalkTurn;
   first: boolean;
   tree: LinkableNode[];
@@ -246,7 +249,14 @@ function Turn({
         />
       ))}
       {t.status !== "thinking" && t.error && (
-        <p className="whitespace-pre-wrap rounded-md border border-taxi/40 bg-taxi/10 px-3 py-2 text-sm text-taxi">{t.error}</p>
+        <div className="space-y-2 rounded-md border border-taxi/40 bg-taxi/10 px-3 py-2 text-sm text-taxi">
+          <p className="whitespace-pre-wrap">{t.error}</p>
+          {retry && (
+            <Button size="sm" variant="outline" disabled={busy} onClick={retry}>
+              <RotateCcw /> Try again
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -383,6 +393,7 @@ export default function TalkView({ id }: { id: string }) {
                 slug={slug}
                 busy={busy}
                 decide={(jobId, index, decision, note) => post({ action: "decide", jobId, index, decision, note })}
+                retry={i === talk.turns.length - 1 && (t.status === "failed" || t.status === "stopped") ? () => post({ action: "retry" }) : undefined}
               />
             ))}
             {settled && !thinking && (

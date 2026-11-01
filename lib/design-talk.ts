@@ -325,6 +325,22 @@ export function soundsAlreadyDone(text: string): boolean {
   return /\b(already|we('ve| have) (done|built|made|designed|got|added|merged|shipped)|(is|was|it's|that's|thats) (built|done|merged|live|shipped|in the game)|exists?|out of date|stale|outdated)\b/i.test(text);
 }
 
+/** The last reply stopped (e.g. Mondo restarted mid-reply): ask again, without the owner retyping it. */
+export function retryTalk(db: DB, project: ProjectConfig, talkId: string): Talk {
+  const talk = talkRow(db, talkId);
+  const last = getTalk(db, talkId).turns.at(-1);
+  if (!last || (last.status !== "failed" && last.status !== "stopped")) throw new DesignError("the last reply didn't fail, so there's nothing to retry");
+  runTurn(db, project, talk, "Try again", false, {
+    auto: true,
+    prompt: `Your last reply was interrupted before it finished. What I'd said was:
+
+${last.text}
+
+Please answer it now.`,
+  });
+  return getTalk(db, talkId);
+}
+
 /** "Check against the code": the owner asks the agent to stop and verify against the objective truth. */
 export function verifyTalk(db: DB, project: ProjectConfig, talkId: string): Talk {
   const talk = talkRow(db, talkId);

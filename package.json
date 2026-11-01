@@ -20,7 +20,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "postinstall": "node node_modules/electron/install.js",
-    "design": "node --disable-warning=ExperimentalWarning --import tsx scripts/design.ts"
+    "design": "node --disable-warning=ExperimentalWarning --import tsx scripts/design.ts",
+    "restart": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/restart-mondo.ps1"
   },
   "engines": {
     "node": ">=22.13"
