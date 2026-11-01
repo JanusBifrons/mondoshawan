@@ -18,6 +18,15 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
   - Run `npm run typecheck && npm test` before pushing, so CI isn't the first to find a failure.
   - If `main` moves while your PR is open, merge it in (`git fetch origin && git merge origin/main`), re-run the checks and push. Don't rebase a pushed branch.
 - **Durable rules go in this file, not in Claude's per-machine memory.** Memory doesn't follow the user between machines.
+- **One Claude session works on Mondo at a time** (the owner's choice, 2026-11-01). Don't start a parallel session on this repo without being asked.
+
+## Working with the owner
+- **Every stop ends with one status sentence that starts with an emoji:** "✅ Done: …", "⏳ Waiting for: …", "❓ I'm asking you: …", "🛑 Blocked: …". Lead with the outcome, then a done / not-done checklist.
+- **Ask every question through the AskUserQuestion box,** never as prose. Give enough context that it reads on its own: what, why, the risk, and the recommended option first.
+- **Verify before handing over.** Rebuild and relaunch the real Mondo yourself, check the port, the URL and the result, and only then say it works. Do every step you can do yourself.
+- **One step at a time** when the owner has to act. Never end with a long numbered list of things for them to do.
+- **Batch anything that needs the owner at the PC** (folder trust, firewall prompts, approvals, `!` commands) and do it all in one sitting, ideally with one click (e.g. Settings → Folder trust).
+- **Restarting Mondo** (the desktop window): stop the Electron process tree whose command line is exactly `electron.exe "<repo>"`, start the same command again, and wait for 4317 and 4318 to listen. It rebuilds itself if the code changed.
 
 ## Decisions (do not undo without discussion)
 - **Next.js is the app; Electron is just a window.** Electron starts the Next server if nothing answers on the port, then loads it. The server must stay runnable alone (`npm run server`) for Phase 3 (phone over LAN).
@@ -128,3 +137,9 @@ Mondo **is** the design bible: a living tree (and web) of design nodes per proje
 - Next.js 16: route handler `params` is a Promise.
 - Server-side singletons (store, agent manager, resolver cache) live on `globalThis`, so they survive dev module reloads. The catch is that after editing `lib/store.ts` or anything it imports, you must restart the dev server, or the old store keeps running the old code.
 - Claude Code on Windows may report a cwd as `C:\...` or `/c/...`. Use `normalizePath` when comparing paths and `toNativePath` before handing one to git or fs.
+- **Design CLI from a worktree:** set `MONDO_DATA_DIR=C:/Users/alecv/Documents/Projects/mondoshawan/mondoshawan/data`. Otherwise it writes to the worktree's own `data/mondo.db`, not the real one.
+- **Don't run `npm ci` in a worktree while a server runs from it:** it fails on file locks and leaves `node_modules` half-deleted.
+- **A stale `.next/dev/types` breaks `next build`** after a route is deleted (it still references the old route). It's generated, so delete it.
+- **Git Bash quoting:** heredocs and `node -e` scripts containing apostrophes break, and `\\d` inside a `node -e` template string loses its backslashes. Write scripts to a file with the editor instead.
+- **Phone screenshots:** emulate a 390px phone through Edge's DevTools protocol, or use eqx-net's Playwright (`require("C:/Users/alecv/Documents/Projects/eqx-net/eqx-net/node_modules/playwright")`). Headless Edge's `--window-size` can't go below ~500px wide.
+- **Design-tree freshness:** EQX-Net reality was surveyed at eqx-net `d36931c`, and Mondo › Agents at `c22905e`. Both drift as code changes; there's no verify job yet.
