@@ -62,7 +62,7 @@ function NavItem({
   );
 }
 
-export function AppSidebar({ projects }: { projects: SidebarProject[] }) {
+export function AppSidebar({ projects, designBadge }: { projects: SidebarProject[]; designBadge?: number }) {
   const pathname = usePathname();
   const { setOpenMobile } = useSidebar();
   // On phones the sidebar is a drawer: close it once a link has been followed.
@@ -126,7 +126,7 @@ export function AppSidebar({ projects }: { projects: SidebarProject[] }) {
           <SidebarGroupLabel className="readout">Design</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <NavItem href="/design" label="Design bible" icon={PenTool} exact />
+              <NavItem href="/design" label="Design bible" icon={PenTool} exact badge={designBadge ? String(designBadge) : undefined} />
               <SidebarMenuItem>
                 <SidebarMenuSub>
                   {projects.map((p) => {

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { DatabaseSync as DatabaseSyncType } from "node:sqlite";
 import { dataDir } from "./config";
-import { DESIGN_SCHEMA, MIGRATIONS } from "./schema";
+import { DESIGN_COLUMNS, DESIGN_SCHEMA, MIGRATIONS } from "./schema";
 
 /**
  * Mondo's local database: SQLite via Node's built-in `node:sqlite` (no native module,
@@ -35,6 +35,10 @@ export function migrate(db: DB): number {
     }
   }
   db.exec(DESIGN_SCHEMA);
+  for (const { table, column, ddl } of DESIGN_COLUMNS) {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+  }
   return MIGRATIONS.length;
 }
 

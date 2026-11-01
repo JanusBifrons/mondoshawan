@@ -97,6 +97,15 @@ Mondo **is** the design bible: a living tree (and web) of design nodes per proje
   - The CLI (`npm run design`, `scripts/design.ts`) always acts as `agent:<name>`.
   - Node refs are ids or title paths ("Weapons/Missiles").
 - **Live refresh:** every change logs a `design_events` row. `/api/design/<project>/stream` polls `MAX(id)`, so CLI writes from other processes show up too.
+- **Priority, chases and links (so nothing goes stale):**
+  - Every node has a **priority**: low, normal (default), high or urgent.
+  - A **chase** (`design_chases`) is a dated follow-up on a node: what needs to happen, who it waits on (you, you at the PC, an agent, someone else), and when. It can be marked done, snoozed (tomorrow or next week) or dropped. Humans and agents can both add chases. This is how to-dos are recorded today.
+  - **External links** (`design_sources`) hold PRs, docs and settings pages, and show on the Links tab.
+  - **Surfacing:**
+    - Chases due today or overdue show as a badge on Design in the sidebar and the phone tab bar.
+    - `/design` lists open chases across projects.
+    - Each project page has a chase list, plus "Overdue chases", "High priority" and "Stale ideas" chips in its "needs you" strip. Stale means idea or proposed, untouched for 30 days, with no open chase.
+- **Adding to design tables:** new tables go in `DESIGN_SCHEMA` (`CREATE … IF NOT EXISTS`); new columns go in `DESIGN_COLUMNS` (added if missing on open). Neither takes a numbered migration, so they can't clash with other branches.
 - **Seeding:** the `design-survey` skill (`.claude/skills/design-survey/SKILL.md`) has a Claude session survey one system at a time from the code.
 - **Later:** harden, impact and verify jobs run through Mondo's agent spawner; "Produce design document" exports.
 

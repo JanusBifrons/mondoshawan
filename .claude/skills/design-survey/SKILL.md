@@ -74,6 +74,12 @@ Survey **one system at a time** (e.g. "Weapons"), as asked. Don't survey the who
    ```
    If it matches, set `"fidelity":"matches"`.
 
-8. **Report** back: nodes created and updated, links, questions raised, drift found, and anything you couldn't work out.
+8. **Chase what needs a person.** If something needs a human decision or action by a date, add a chase, not just a question:
+   ```bash
+   npm run -s design -- EQX-Net chase '{"node":"…","text":"Decide whether guests can play","due":"2026-11-08","waiting_on":"you"}' --as agent:survey
+   ```
+   Also add links (`source` with `{"node","ref","title"}`) to the PRs, docs or pages behind a node.
+
+9. **Report** back: nodes created and updated, links, questions raised, drift found, and anything you couldn't work out.
 
 Mondo doesn't need to be running. The CLI writes straight to `data/mondo.db`, and open pages refresh on their own.

@@ -29,6 +29,12 @@ import {
   type QuestionOutcome,
   type ReviewDecision,
   type Stage,
+  PRIORITIES,
+  WAITING_ON,
+  STALE_AFTER_MS,
+  type Priority,
+  type WaitingOn,
+  type ChaseStatus,
 } from "./design-meta";
 
 export * from "./design-meta";
@@ -79,10 +85,34 @@ export interface NodeRow {
   fidelity: Fidelity;
   checkedSha: string | null;
   realityFlag: string | null;
+  priority: Priority;
   sort: number;
   createdBy: Actor;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface Chase {
+  id: number;
+  nodeId: string;
+  text: string;
+  waitingOn: WaitingOn;
+  dueAt: number;
+  status: ChaseStatus;
+  snoozes: number;
+  note: string | null;
+  createdBy: Actor;
+  createdAt: number;
+  closedBy: Actor | null;
+  closedAt: number | null;
+}
+
+/** An open chase with where it lives, for cross-node and cross-project lists. */
+export interface ChaseListItem extends Chase {
+  project: string;
+  nodeTitle: string;
+  nodeStage: Stage;
+  priority: Priority;
 }
 
 export interface TreeNode extends NodeRow {
@@ -95,6 +125,9 @@ export interface TreeNode extends NodeRow {
   openQuestions: number;
   blockingQuestions: number;
   openReviews: number;
+  openChases: number;
+  /** Earliest due time of the open chases, or null. */
+  nextChaseAt: number | null;
 }
 
 export interface Revision {
@@ -186,6 +219,7 @@ export interface NodeDetail {
   questions: Question[];
   links: Link[];
   sources: Source[];
+  chases: Chase[];
   events: DesignEvent[];
 }
 
@@ -203,6 +237,7 @@ const toNode = (r: any): NodeRow => ({
   fidelity: r.fidelity,
   checkedSha: r.checked_sha,
   realityFlag: r.reality_flag,
+  priority: r.priority ?? "normal",
   sort: r.sort,
   createdBy: r.created_by,
   createdAt: r.created_at,
@@ -271,6 +306,21 @@ const toLink = (r: any): Link => ({
   createdAt: r.created_at,
 });
 
+const toChase = (r: any): Chase => ({
+  id: r.id,
+  nodeId: r.node_id,
+  text: r.text,
+  waitingOn: r.waiting_on,
+  dueAt: r.due_at,
+  status: r.status,
+  snoozes: r.snoozes,
+  note: r.note,
+  createdBy: r.created_by,
+  createdAt: r.created_at,
+  closedBy: r.closed_by,
+  closedAt: r.closed_at,
+});
+
 const toEvent = (r: any): DesignEvent => ({
   id: r.id,
   project: r.project,
@@ -306,7 +356,9 @@ export function listTree(db: DB, project: string): TreeNode[] {
         EXISTS (SELECT 1 FROM design_revisions r WHERE r.node_id = n.id AND r.field = 'reality') AS has_reality,
         (SELECT COUNT(*) FROM design_questions q WHERE q.node_id = n.id AND q.status = 'open') AS open_q,
         (SELECT COUNT(*) FROM design_questions q WHERE q.node_id = n.id AND q.status = 'open' AND q.blocking = 1) AS blocking_q,
-        (SELECT COUNT(*) FROM design_reviews v WHERE v.node_id = n.id AND v.status = 'open') AS open_v
+        (SELECT COUNT(*) FROM design_reviews v WHERE v.node_id = n.id AND v.status = 'open') AS open_v,
+        (SELECT COUNT(*) FROM design_chases c WHERE c.node_id = n.id AND c.status = 'open') AS open_c,
+        (SELECT MIN(c.due_at) FROM design_chases c WHERE c.node_id = n.id AND c.status = 'open') AS next_c
       FROM design_nodes n WHERE n.project = ?
       ORDER BY n.sort, n.created_at`,
     )
@@ -321,6 +373,8 @@ export function listTree(db: DB, project: string): TreeNode[] {
     openQuestions: r.open_q,
     blockingQuestions: r.blocking_q,
     openReviews: r.open_v,
+    openChases: r.open_c,
+    nextChaseAt: r.next_c ?? null,
   }));
 }
 
@@ -382,6 +436,10 @@ export function getNodeDetail(db: DB, id: string): NodeDetail {
       .map(toQuestion),
     links,
     sources: db.prepare("SELECT * FROM design_sources WHERE node_id = ? ORDER BY id").all(id) as unknown as Source[],
+    chases: db
+      .prepare("SELECT * FROM design_chases WHERE node_id = ? ORDER BY status = 'open' DESC, due_at")
+      .all(id)
+      .map(toChase),
     events: db.prepare("SELECT * FROM design_events WHERE node_id = ? ORDER BY id DESC LIMIT 100").all(id).map(toEvent),
   };
 }
@@ -803,6 +861,114 @@ export function addSource(db: DB, nodeId: string, input: { ref: string; title?: 
 
 // ---------- views ----------
 
+// ---------- priority & chases ----------
+
+export function setPriority(db: DB, nodeId: string, priorityIn: unknown, actor: Actor): NodeRow {
+  const priority = oneOf(PRIORITIES, priorityIn, "priority");
+  const node = mustNode(db, nodeId);
+  if (node.priority === priority) return node;
+  return tx(db, () => {
+    db.prepare("UPDATE design_nodes SET priority = ?, updated_at = ? WHERE id = ?").run(priority, now(), nodeId);
+    log(db, node.project, nodeId, actor, "priority", { from: node.priority, to: priority });
+    return mustNode(db, nodeId);
+  });
+}
+
+/**
+ * Parse a due time: epoch ms, an ISO date-time, or a plain date ("2026-11-02", which
+ * means 09:00 local time that day).
+ */
+export function parseDue(v: unknown): number {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim()) {
+    const t = /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? new Date(v.trim() + "T09:00:00").getTime() : Date.parse(v);
+    if (Number.isFinite(t)) return t;
+  }
+  throw new DesignError("due must be a date like 2026-11-02, an ISO date-time, or epoch ms");
+}
+
+function mustChase(db: DB, id: number): Chase {
+  const r = db.prepare("SELECT * FROM design_chases WHERE id = ?").get(id);
+  if (!r) throw new DesignError(`chase ${id} not found`, 404);
+  return toChase(r);
+}
+
+/** A dated follow-up on a node, so it doesn't go stale or get forgotten. */
+export function addChase(
+  db: DB,
+  nodeId: string,
+  input: { text: unknown; due: unknown; waitingOn?: unknown },
+  actor: Actor,
+): Chase {
+  const node = mustNode(db, nodeId);
+  const body = text(input.text, "chase", 2000);
+  const dueAt = parseDue(input.due);
+  const waitingOn = input.waitingOn === undefined ? "you" : oneOf(WAITING_ON, input.waitingOn, "waitingOn");
+  return tx(db, () => {
+    const r = db
+      .prepare("INSERT INTO design_chases (node_id, text, waiting_on, due_at, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(nodeId, body, waitingOn, dueAt, actor, now());
+    touch(db, nodeId);
+    log(db, node.project, nodeId, actor, "chase_added", { chase: Number(r.lastInsertRowid), dueAt, waitingOn });
+    return mustChase(db, Number(r.lastInsertRowid));
+  });
+}
+
+/** Push an open chase back to a new due time. */
+export function snoozeChase(db: DB, chaseId: number, due: unknown, actor: Actor): Chase {
+  const c = mustChase(db, chaseId);
+  if (c.status !== "open") throw new DesignError("chase is already closed");
+  const dueAt = parseDue(due);
+  const node = mustNode(db, c.nodeId);
+  return tx(db, () => {
+    db.prepare("UPDATE design_chases SET due_at = ?, snoozes = snoozes + 1 WHERE id = ?").run(dueAt, chaseId);
+    touch(db, c.nodeId);
+    log(db, node.project, c.nodeId, actor, "chase_snoozed", { chase: chaseId, from: c.dueAt, to: dueAt });
+    return mustChase(db, chaseId);
+  });
+}
+
+/** Close a chase: done (it happened) or dropped (no longer needed). */
+export function closeChase(db: DB, chaseId: number, outcomeIn: unknown, note: unknown, actor: Actor): Chase {
+  const outcome = oneOf(["done", "dropped"] as const, outcomeIn, "outcome");
+  const c = mustChase(db, chaseId);
+  if (c.status !== "open") throw new DesignError("chase is already closed");
+  const node = mustNode(db, c.nodeId);
+  const n = typeof note === "string" && note.trim() ? note.trim() : null;
+  return tx(db, () => {
+    db.prepare("UPDATE design_chases SET status = ?, note = COALESCE(?, note), closed_by = ?, closed_at = ? WHERE id = ?").run(
+      outcome,
+      n,
+      actor,
+      now(),
+      chaseId,
+    );
+    touch(db, c.nodeId);
+    log(db, node.project, c.nodeId, actor, "chase_closed", { chase: chaseId, outcome });
+    return mustChase(db, chaseId);
+  });
+}
+
+/** Open chases, soonest first, for one project or all of them. */
+export function listOpenChases(db: DB, project?: string): ChaseListItem[] {
+  const rows = db
+    .prepare(
+      `SELECT c.*, n.project AS n_project, n.title AS n_title, n.stage AS n_stage, n.priority AS n_priority
+       FROM design_chases c JOIN design_nodes n ON n.id = c.node_id
+       WHERE c.status = 'open' AND n.stage != 'retired' ${project ? "AND n.project = ?" : ""}
+       ORDER BY c.due_at`,
+    )
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .all(...(project ? [project] : [])) as any[];
+  return rows.map((r) => ({
+    ...toChase(r),
+    project: r.n_project,
+    nodeTitle: r.n_title,
+    nodeStage: r.n_stage,
+    priority: r.n_priority ?? "normal",
+  }));
+}
+
 export interface Gaps {
   approvedUnbuilt: TreeNode[];
   drifted: TreeNode[];
@@ -810,10 +976,16 @@ export interface Gaps {
   flagged: TreeNode[];
   blocking: TreeNode[];
   openReviews: TreeNode[];
+  /** Nodes with an open chase past its due time. */
+  overdue: TreeNode[];
+  /** High or urgent priority, not built or retired. */
+  highPriority: TreeNode[];
+  /** Ideas and proposals untouched for 30 days with no open chase. */
+  stale: TreeNode[];
 }
 
 /** What needs attention: the work list that falls out of the bible. */
-export function gaps(tree: TreeNode[]): Gaps {
+export function gaps(tree: TreeNode[], at = Date.now()): Gaps {
   const live = tree.filter((n) => n.stage !== "retired");
   return {
     approvedUnbuilt: live.filter((n) => n.stage === "approved"),
@@ -822,5 +994,10 @@ export function gaps(tree: TreeNode[]): Gaps {
     flagged: live.filter((n) => n.realityFlag),
     blocking: live.filter((n) => n.blockingQuestions > 0),
     openReviews: live.filter((n) => n.openReviews > 0),
+    overdue: live.filter((n) => n.nextChaseAt !== null && n.nextChaseAt < at),
+    highPriority: live.filter((n) => (n.priority === "high" || n.priority === "urgent") && n.stage !== "built"),
+    stale: live.filter(
+      (n) => (n.stage === "idea" || n.stage === "proposed") && n.openChases === 0 && at - n.updatedAt > STALE_AFTER_MS,
+    ),
   };
 }

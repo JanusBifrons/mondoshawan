@@ -4,6 +4,11 @@ import {
   addLink,
   addNode,
   addSource,
+  addChase,
+  closeChase,
+  listOpenChases,
+  setPriority,
+  snoozeChase,
   askQuestion,
   decideReview,
   flagReality,
@@ -55,6 +60,11 @@ export const ACTIONS = [
   "link",
   "unlink",
   "source",
+  "priority",
+  "chase",
+  "snooze_chase",
+  "close_chase",
+  "chases",
 ] as const;
 
 function nodeId(db: DB, project: string, ref: unknown, what = "node"): string {
@@ -206,6 +216,21 @@ export function runAction(db: DB, project: string, input: ActionInput, actor: Ac
 
     case "source":
       return addSource(db, nodeId(db, project, a.node), { ref: a.ref, title: a.title }, actor);
+
+    case "priority":
+      return setPriority(db, nodeId(db, project, a.node), a.priority, actor);
+
+    case "chase":
+      return addChase(db, nodeId(db, project, a.node), { text: a.text, due: a.due, waitingOn: a.waiting_on ?? a.waitingOn }, actor);
+
+    case "snooze_chase":
+      return snoozeChase(db, num(a.chase, "chase"), a.due, actor);
+
+    case "close_chase":
+      return closeChase(db, num(a.chase, "chase"), a.outcome ?? "done", a.note, actor);
+
+    case "chases":
+      return listOpenChases(db, project);
 
     default:
       throw new DesignError(`unknown action "${a.action}". Actions: ${ACTIONS.join(", ")}`);

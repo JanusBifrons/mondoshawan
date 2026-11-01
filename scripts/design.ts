@@ -16,7 +16,7 @@
 import fs from "node:fs";
 import { loadConfig, projectSlug } from "../lib/config";
 import { openDb } from "../lib/db";
-import { DesignError, FIDELITIES, KINDS, LINK_TYPES, QUESTION_OUTCOMES, STAGES } from "../lib/design";
+import { DesignError, WAITING_ON, FIDELITIES, KINDS, LINK_TYPES, QUESTION_OUTCOMES, STAGES } from "../lib/design";
 import { ACTIONS, runAction } from "../lib/design-actions";
 
 const HELP = `Usage: npm run -s design -- <project> <action> ['{json args}' | --file args.json] [--as agent:<name>]
@@ -40,6 +40,11 @@ Actions:
   link           {from, to, type, note?}
   unlink         {link}
   source         {node, ref, title?}
+  priority       {node, priority}          low | normal | high | urgent
+  chase          {node, text, due, waiting_on?}   due: 2026-11-02 (09:00 local) or ISO; waiting_on: ${WAITING_ON.join(" | ")}
+  snooze_chase   {chase, due}
+  close_chase    {chase, outcome?, note?}  outcome: done (default) | dropped
+  chases                                 open chases, soonest first
   batch          [{action, ...args}, ...]  run several actions in order (use --file)
 
 stage:    ${STAGES.join(" | ")}

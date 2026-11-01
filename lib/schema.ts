@@ -202,4 +202,29 @@ export const DESIGN_SCHEMA = `
   );
   CREATE INDEX IF NOT EXISTS design_events_project ON design_events(project, id);
   CREATE INDEX IF NOT EXISTS design_events_node ON design_events(node_id, id);
+
+  CREATE TABLE IF NOT EXISTS design_chases (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    node_id     TEXT NOT NULL REFERENCES design_nodes(id),
+    text        TEXT NOT NULL,
+    waiting_on  TEXT NOT NULL DEFAULT 'you',
+    due_at      INTEGER NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'open',
+    snoozes     INTEGER NOT NULL DEFAULT 0,
+    note        TEXT,
+    created_by  TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    closed_by   TEXT,
+    closed_at   INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS design_chases_open ON design_chases(status, due_at);
+  CREATE INDEX IF NOT EXISTS design_chases_node ON design_chases(node_id, status);
   `;
+
+/**
+ * Columns added to design tables after they first shipped. Added idempotently (if missing)
+ * on every open, like DESIGN_SCHEMA, so they never need a numbered migration.
+ */
+export const DESIGN_COLUMNS: readonly { table: string; column: string; ddl: string }[] = [
+  { table: "design_nodes", column: "priority", ddl: "TEXT NOT NULL DEFAULT 'normal'" },
+];
