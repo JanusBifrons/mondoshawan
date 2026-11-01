@@ -10,7 +10,7 @@ import { fmtDuration, fmtTokens } from "@/components/usage-ui";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { findNodeRef, wikiLinks, type LinkableNode } from "@/lib/design-links";
-import type { Proposal, Talk, TalkTurn } from "@/lib/design-talk";
+import type { Proposal, Talk, TalkAction, TalkTurn } from "@/lib/design-talk";
 import { cn } from "@/lib/utils";
 
 /** Agent text with [[node]] links that open the node in the design bible. */
@@ -45,6 +45,70 @@ function Text({ md, tree, slug }: { md: string; tree: LinkableNode[]; slug: stri
   );
 }
 
+const WAITING: Record<string, string> = { you: "you", you_at_pc: "you at the PC", agent: "an agent", other: "someone else" };
+
+/** One action of a proposal, shown as exactly what will be saved. */
+function ActionView({ a, tree, slug }: { a: TalkAction; tree: LinkableNode[]; slug: string | null }) {
+  const s = (k: string) => (typeof a.args[k] === "string" ? (a.args[k] as string) : a.args[k] !== undefined ? String(a.args[k]) : "");
+  const nodeName = (ref: string) => (ref ? (findNodeRef(tree, ref)?.title ?? ref.split("/").at(-1) ?? ref) : "this node");
+  const label = (text: string) => <div className="readout normal-case text-brass">{text}</div>;
+  const body = (md: string) => (md ? <Text md={md} tree={tree} slug={slug} /> : null);
+  let head: string;
+  let content: React.ReactNode = null;
+  switch (a.action) {
+    case "add_node":
+      head = `New node: ${s("title")}${a.args.parent ? ` (under ${nodeName(s("parent"))})` : ""}${a.args.stage ? ` · ${s("stage")}` : ""}`;
+      content = body(s("summary"));
+      break;
+    case "ensure":
+      head = `New node(s): ${s("path").split("/").join(" › ")}`;
+      content = body(s("summary"));
+      break;
+    case "write_intent":
+      head = `Intent for ${nodeName(s("node"))} (draft)`;
+      content = body(s("text"));
+      break;
+    case "ask":
+      head = `Question on ${nodeName(s("node"))}${a.args.blocking ? " (blocks approval)" : ""}`;
+      content = body(s("text"));
+      break;
+    case "resolve_question":
+      head = `Close the question (${s("outcome") || "answered"})`;
+      content = body(s("answer"));
+      break;
+    case "chase":
+      head = `To-do on ${nodeName(s("node"))}: waiting on ${WAITING[s("waiting_on") || s("waitingOn")] ?? "you"}${a.args.due ? `, due ${s("due").slice(0, 10)}` : ""}`;
+      content = body(s("text"));
+      break;
+    case "link":
+      head = `Link: ${nodeName(s("from"))} ${s("type") || "relates to"} ${nodeName(s("to"))}`;
+      content = body(s("note"));
+      break;
+    case "update_node":
+      head = `Update ${nodeName(s("node"))}${a.args.title ? `: rename to "${s("title")}"` : ""}`;
+      content = body(s("summary"));
+      break;
+    case "priority":
+      head = `Priority of ${nodeName(s("node"))}: ${s("priority")}`;
+      break;
+    case "flag":
+      head = `Flag ${nodeName(s("node"))}'s Reality as wrong`;
+      content = body(s("note"));
+      break;
+    case "source":
+      head = `Link on ${nodeName(s("node"))}: ${s("title") || s("ref")}`;
+      break;
+    default:
+      head = a.action;
+  }
+  return (
+    <div className="space-y-1 border-l-2 border-brass/40 pl-3">
+      {label(head)}
+      {content}
+    </div>
+  );
+}
+
 const PROPOSAL_STATE: Record<Proposal["status"], { label: string; cls: string }> = {
   pending: { label: "Waiting for you", cls: "border-leeloo/60" },
   approved: { label: "Approved and saved", cls: "border-earth/50 opacity-80" },
@@ -72,7 +136,12 @@ function ProposalCard({
         <span className="font-semibold">{p.title}</span>
         <span className="readout normal-case">{s.label}</span>
       </div>
-      <Text md={p.detail} tree={tree} slug={slug} />
+      {p.detail && <p className="text-sm text-muted-foreground">{p.detail}</p>}
+      <div className="space-y-3">
+        {p.actions.map((a, i) => (
+          <ActionView key={i} a={a} tree={tree} slug={slug} />
+        ))}
+      </div>
       {p.error && <p className="text-xs text-taxi">{p.error}</p>}
       {p.status === "pending" && (
         <div className="flex gap-2">

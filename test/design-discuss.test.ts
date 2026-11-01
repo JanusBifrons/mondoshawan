@@ -42,6 +42,9 @@ describe("design talk brief", () => {
     expect(b).toContain("matter of taste");
     expect(b).toContain("can't write to the bible yourself");
     expect(b).toContain("only when the owner taps Approve");
+    expect(b).toContain("Nothing said in the talk may be lost");
+    expect(b).toContain("Break big topics down");
+    expect(b).toContain("A new node always gets its Intent in the same proposal");
   });
 
   it("starts an open talk from the tree", () => {
