@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { ActivityLine } from "@/lib/fleet";
 import type { Job } from "@/lib/jobs";
+import { TriagePanel } from "@/components/triage-panel";
+import { triageDrops } from "@/lib/triage-drops";
 import type { UsageRun } from "@/lib/usage";
 import { cn } from "@/lib/utils";
 
@@ -156,6 +158,8 @@ export default function JobView({ id }: { id: string }) {
                 )}
               </Card>
             )}
+
+            {j.kind === "triage" && j.status === "done" && j.project && <TriagePanel project={j.project} drops={triageDrops(j.result)} />}
 
             <Card className="gap-3 px-4 text-sm">
               <h2 className="readout">Usage</h2>

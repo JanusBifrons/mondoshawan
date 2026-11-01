@@ -323,3 +323,21 @@ describe("searching what's already decided", () => {
     expect(b).toContain("Nothing the owner says is dropped, even if it's off the current topic");
   });
 });
+
+describe("checking the open questions", () => {
+  it("briefs the job with the owner's rule and reads its drop list safely", async () => {
+    const { triageInstruction } = await import("@/lib/design-triage");
+    const { triageDrops } = await import("@/lib/triage-drops");
+    const b = triageInstruction({ name: "EQX-Net", path: "C:/x" }, [{ id: 32, node: "Hulls", text: "Which hulls does each station sell?" }], "question-check");
+    expect(b).toContain("Question 32 (on \"Hulls\")");
+    expect(b).toContain("Already answered");
+    expect(b).toContain("Micro detail");
+    expect(b).toContain("When unsure, keep it.");
+    expect(b).toContain("npm run -s design -- EQX-Net search");
+    expect(triageDrops({ drop: [{ question: 32, reason: "micro", answer: "later" }, { question: "x" }, null, { question: "7", reason: "dup" }] })).toEqual([
+      { question: 32, reason: "micro", answer: "later" },
+      { question: 7, reason: "dup", answer: "" },
+    ]);
+    expect(triageDrops(null)).toEqual([]);
+  });
+});

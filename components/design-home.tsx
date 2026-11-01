@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, CircleHelp, Loader2, MessagesSquare, RefreshCw, Zap } from "lucide-react";
+import { ChevronDown, ChevronRight, CircleHelp, ListChecks, Loader2, MessagesSquare, RefreshCw, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { QuestionListItem, TreeNode } from "@/lib/design";
@@ -265,6 +265,38 @@ export function RapidFireLink({ project, count }: { project?: string; count: num
         <Zap /> Rapid fire
       </a>
     </Button>
+  );
+}
+
+/**
+ * "Check questions": a background job reviews the open questions against the rule that questions
+ * must earn their place, and lists the ones to drop on its page. Nothing changes until the owner picks.
+ */
+export function CheckQuestionsButton({ project, count }: { project: string; count: number }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!count) return null;
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await fetch(`/api/design/${project}/triage`, { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      router.push(`/agents/job/${encodeURIComponent(d.jobId)}`);
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <span className="flex items-center gap-2">
+      <Button size="sm" variant="ghost" disabled={busy} onClick={run} title="A background job checks each open question isn't micro detail or already answered, and suggests which to drop">
+        {busy ? <Loader2 className="animate-spin" /> : <ListChecks />} <span className="hidden sm:inline">Check questions</span>
+      </Button>
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </span>
   );
 }
 
