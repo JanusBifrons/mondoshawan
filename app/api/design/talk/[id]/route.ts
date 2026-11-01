@@ -17,7 +17,7 @@ const fail = (err: unknown) => {
 export async function GET(_req: Request, { params }: Ctx) {
   try {
     const talk = getTalk(getDb(), (await params).id);
-    const project = findProject(talk.project);
+    const project = findProject(projectSlug(talk.project));
     return Response.json({ talk, slug: project ? projectSlug(project.name) : null });
   } catch (err) {
     return fail(err);
@@ -39,7 +39,7 @@ export async function POST(req: Request, { params }: Ctx) {
   }
   try {
     const db = getDb();
-    const project = findProject(getTalk(db, id).project);
+    const project = findProject(projectSlug(getTalk(db, id).project));
     if (!project) return Response.json({ error: "this talk's project is no longer set up" }, { status: 404 });
     switch (b.action) {
       case "say":

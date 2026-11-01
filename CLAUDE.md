@@ -26,7 +26,7 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
 - **Verify before handing over.** Rebuild and relaunch the real Mondo yourself, check the port, the URL and the result, and only then say it works. Do every step you can do yourself.
 - **One step at a time** when the owner has to act. Never end with a long numbered list of things for them to do.
 - **Batch anything that needs the owner at the PC** (folder trust, firewall prompts, approvals, `!` commands) and do it all in one sitting, ideally with one click (e.g. Settings → Folder trust).
-- **Restarting Mondo** (the desktop window): stop the Electron process tree whose command line is exactly `electron.exe "<repo>"`, start the same command again, and wait for 4317 and 4318 to listen. It rebuilds itself if the code changed.
+- **Restarting Mondo** (the desktop window): stop the Electron process tree whose command line is `electron.exe "<repo>"` (it ends with a trailing space, so match loosely), plus its `serve.mjs` / `next start` children, start the same command again, and wait for 4317 and 4318 to listen. It rebuilds itself if the code changed.
 
 ## Decisions (do not undo without discussion)
 - **Next.js is the app; Electron is just a window.** Electron starts the Next server if nothing answers on the port, then loads it. The server must stay runnable alone (`npm run server`) for Phase 3 (phone over LAN).
@@ -161,6 +161,9 @@ Mondo **is** the design bible: a living tree (and web) of design nodes per proje
 - Server-side singletons (store, agent manager, resolver cache) live on `globalThis`, so they survive dev module reloads. The catch is that after editing `lib/store.ts` or anything it imports, you must restart the dev server, or the old store keeps running the old code.
 - Claude Code on Windows may report a cwd as `C:\...` or `/c/...`. Use `normalizePath` when comparing paths and `toNativePath` before handing one to git or fs.
 - **Design CLI from a worktree:** set `MONDO_DATA_DIR=C:/Users/alecv/Documents/Projects/mondoshawan/mondoshawan/data`. Otherwise it writes to the worktree's own `data/mondo.db`, not the real one.
+- **Worktree packages:** link the main checkout's `node_modules` with a junction (`New-Item -ItemType Junction`) instead of installing. Before `git worktree remove`, unlink it with `cmd /c rmdir <worktree>
+ode_modules`, or the removal fails partway.
+- **`findProject` takes a slug** (`projectSlug(name)`), not a project's display name.
 - **Don't run `npm ci` in a worktree while a server runs from it:** it fails on file locks and leaves `node_modules` half-deleted.
 - **A stale `.next/dev/types` breaks `next build`** after a route is deleted (it still references the old route). It's generated, so delete it.
 - **Git Bash quoting:** heredocs and `node -e` scripts containing apostrophes break, and `\\d` inside a `node -e` template string loses its backslashes. Write scripts to a file with the editor instead.
