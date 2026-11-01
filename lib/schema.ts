@@ -49,4 +49,102 @@ export const MIGRATIONS: readonly string[] = [
   );
   CREATE INDEX drive_syncs_project ON drive_syncs(project, started_at);
   `,
+  // design bible: nodes (tree + stage), versioned intent/reality, reviews, questions, links
+  `
+  CREATE TABLE design_nodes (
+    id              TEXT PRIMARY KEY,
+    project         TEXT NOT NULL,
+    parent_id       TEXT REFERENCES design_nodes(id),
+    title           TEXT NOT NULL,
+    summary         TEXT NOT NULL DEFAULT '',
+    kind            TEXT NOT NULL DEFAULT 'mechanic',
+    stage           TEXT NOT NULL,
+    fidelity        TEXT NOT NULL DEFAULT 'unchecked',
+    checked_sha     TEXT,
+    reality_flag    TEXT,
+    sort            REAL NOT NULL DEFAULT 0,
+    created_by      TEXT NOT NULL,
+    created_at      INTEGER NOT NULL,
+    updated_at      INTEGER NOT NULL
+  );
+  CREATE INDEX design_nodes_project ON design_nodes(project, parent_id);
+
+  CREATE TABLE design_revisions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    node_id     TEXT NOT NULL REFERENCES design_nodes(id),
+    field       TEXT NOT NULL,
+    text        TEXT NOT NULL,
+    evidence    TEXT,
+    commit_sha  TEXT,
+    note        TEXT,
+    author      TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    signed_at   INTEGER,
+    signed_by   TEXT
+  );
+  CREATE INDEX design_revisions_node ON design_revisions(node_id, field, id);
+
+  CREATE TABLE design_reviews (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    node_id      TEXT NOT NULL REFERENCES design_nodes(id),
+    intent_rev   INTEGER,
+    reality_rev  INTEGER,
+    gap          TEXT NOT NULL,
+    reason       TEXT,
+    decision     TEXT,
+    status       TEXT NOT NULL DEFAULT 'open',
+    opened_by    TEXT NOT NULL,
+    opened_at    INTEGER NOT NULL,
+    closed_by    TEXT,
+    closed_at    INTEGER
+  );
+  CREATE INDEX design_reviews_node ON design_reviews(node_id, status);
+
+  CREATE TABLE design_questions (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    node_id      TEXT NOT NULL REFERENCES design_nodes(id),
+    text         TEXT NOT NULL,
+    blocking     INTEGER NOT NULL DEFAULT 0,
+    related      TEXT NOT NULL DEFAULT '[]',
+    status       TEXT NOT NULL DEFAULT 'open',
+    answer       TEXT,
+    raised_by    TEXT NOT NULL,
+    created_at   INTEGER NOT NULL,
+    resolved_by  TEXT,
+    resolved_at  INTEGER
+  );
+  CREATE INDEX design_questions_node ON design_questions(node_id, status);
+
+  CREATE TABLE design_links (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_id     TEXT NOT NULL REFERENCES design_nodes(id),
+    to_id       TEXT NOT NULL REFERENCES design_nodes(id),
+    type        TEXT NOT NULL,
+    note        TEXT,
+    created_by  TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    UNIQUE (from_id, to_id, type)
+  );
+
+  CREATE TABLE design_sources (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    node_id     TEXT NOT NULL REFERENCES design_nodes(id),
+    ref         TEXT NOT NULL,
+    title       TEXT,
+    created_by  TEXT NOT NULL,
+    created_at  INTEGER NOT NULL
+  );
+
+  CREATE TABLE design_events (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    project  TEXT NOT NULL,
+    node_id  TEXT,
+    at       INTEGER NOT NULL,
+    actor    TEXT NOT NULL,
+    type     TEXT NOT NULL,
+    detail   TEXT NOT NULL DEFAULT '{}'
+  );
+  CREATE INDEX design_events_project ON design_events(project, id);
+  CREATE INDEX design_events_node ON design_events(node_id, id);
+  `,
 ];

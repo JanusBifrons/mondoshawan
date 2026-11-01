@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, FolderKanban, Library, Map, MonitorDot, PenTool, Settings } from "lucide-react";
+import { BookOpen, FolderKanban, GitFork, Library, Map, MonitorDot, PenTool, Settings } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -117,10 +117,35 @@ export function AppSidebar({ projects }: { projects: SidebarProject[] }) {
         </SidebarGroup>
 
         <SidebarGroup>
+          <SidebarGroupLabel className="readout">Design</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <NavItem href="/design" label="Design bible" icon={PenTool} exact />
+              <SidebarMenuItem>
+                <SidebarMenuSub>
+                  {projects.map((p) => {
+                    const href = `/design/${p.slug}`;
+                    return (
+                      <SidebarMenuSubItem key={p.slug}>
+                        <SidebarMenuSubButton asChild isActive={pathname === href} className={NAV_ACTIVE}>
+                          <Link href={href}>
+                            <GitFork />
+                            <span>{p.name}</span>
+                          </Link>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    );
+                  })}
+                </SidebarMenuSub>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
           <SidebarGroupLabel className="readout">Coming soon</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <NavItem href="/design" label="Design docs" icon={PenTool} />
               <NavItem href="/roadmap" label="Roadmap" icon={Map} />
               <NavItem href="/prompts" label="Prompts & handoffs" icon={FolderKanban} />
             </SidebarMenu>

@@ -25,7 +25,7 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
 - **Stack:** shadcn/ui (Radix, `radix-nova` style) and Tailwind v4. Components live in `components/ui/` (add more with `npx shadcn@latest add <name>`). Light/dark mode comes from `next-themes` (class-based, follows the system by default).
 - **Hooks location:** shadcn's React hooks go to `lib/hooks/` (set in `components.json`), because `hooks/` is reserved for the Claude Code hook script.
 - **Layout:** `app/layout.tsx` wraps every page in the sidebar (`components/app-sidebar.tsx`). Each page renders its own `<PageHeader>`.
-- **Pages:** Sessions (`/`), Knowledge base (`/knowledge`, `/knowledge/<project>`), Settings (`/settings`), and "coming soon" placeholders (`/design`, `/roadmap`, `/prompts`).
+- **Pages:** Sessions (`/`), Knowledge base (`/knowledge`, `/knowledge/<project>`), Settings (`/settings`), Design bible (`/design`, `/design/<project>`), and "coming soon" placeholders (`/roadmap`, `/prompts`).
 
 ## Look and feel (Fifth Element theme)
 - **The rule:** Mondo is styled after The Fifth Element (1997). Use original styling only: no film logos, stills or quotes.
@@ -53,6 +53,27 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
   - Drive docs are origin `drive` in the knowledge base; their text opens in the reading pane.
   - The sync is read-only toward Drive.
 
+## Design bible
+Mondo **is** the design bible: a living tree (and web) of design nodes per project, stored in SQLite. Exported documents are only snapshots of it. The rules live in `lib/design.ts`; the vocabulary, which is client-safe, is in `lib/design-meta.ts`.
+- **Stages run from reality up to ideas:**
+  - Ground: `built`.
+  - Grey zone: `in_build`, `approved`.
+  - Sky: `proposed`, `idea`.
+  - Plus `retired`.
+- **Two texts per node, both versioned** (`design_revisions`, append-only):
+  - **Intent** is what it should be. Only the human signs it, and the latest signed revision is canon; newer ones are drafts.
+  - **Reality** is what the game does today. It is written **only by agents** from the code, with evidence and a commit, and needs no sign-off. The human can flag it as wrong, which asks for a re-survey.
+- **Canon stages** (`approved`, `in_build`) need signed intent and no open blocking questions. Agents may only move nodes to `idea` / `proposed` / `built`, and can't take nodes out of canon.
+- **Fidelity:** `drifted` opens a review. The human decides it: fix the build (→ `in_build`), change the intent, or accept the gap.
+- **Actor:**
+  - Every write goes through `runAction` (`lib/design-actions.ts`) with an actor.
+  - The web API (`POST /api/design/<project>`) always acts as `human`.
+  - The CLI (`npm run design`, `scripts/design.ts`) always acts as `agent:<name>`.
+  - Node refs are ids or title paths ("Weapons/Missiles").
+- **Live refresh:** every change logs a `design_events` row. `/api/design/<project>/stream` polls `MAX(id)`, so CLI writes from other processes show up too.
+- **Seeding:** the `design-survey` skill (`.claude/skills/design-survey/SKILL.md`) has a Claude session survey one system at a time from the code.
+- **Later:** harden, impact and verify jobs run through Mondo's agent spawner; "Produce design document" exports.
+
 ## Launching
 - **Shortcuts:** `npm run shortcut` creates Desktop and Start menu shortcuts that run `node_modules/electron/dist/electron.exe "<repo>"`, so no terminal is needed. Flags: `-Startup`, `-Remove`.
 - **Auto-rebuild:** in production mode `electron/main.cjs` runs `next build` first when there's no build, or when git HEAD plus uncommitted changes differ from `.next/mondo-build-stamp`.
@@ -65,6 +86,7 @@ A Windows desktop app that monitors local Claude Code sessions. See `design/brie
 - `npm run fake -- <scenario>`: fire fake hook events.
 - `npm run hooks:install` (dry run), then `npm run hooks:install -- --apply`; `npm run hooks:uninstall`.
 - `npm run drive:status` / `npm run drive:import -- <payload.json>`: Drive mirror (used by the drive-sync skill).
+- `npm run -s design -- <project> <action> [json] --as agent:<name>`: the design bible's agent CLI (`help` lists actions).
 - `npm test`: vitest.
 
 ## Notes

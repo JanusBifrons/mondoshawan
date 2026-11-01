@@ -19,7 +19,8 @@
     "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-shortcut.ps1",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "postinstall": "node node_modules/electron/install.js"
+    "postinstall": "node node_modules/electron/install.js",
+    "design": "node --disable-warning=ExperimentalWarning --import tsx scripts/design.ts"
   },
   "engines": {
     "node": ">=22.13"
