@@ -1,0 +1,28 @@
+name: Auto-merge
+
+# Turns on GitHub auto-merge for every PR into main as soon as it's opened.
+# Auto-merge waits for the required "verify" check (branch protection on main), then
+# merges with a merge commit and deletes the branch. Draft PRs are skipped until they're
+# marked ready. To keep a PR open, mark it draft or run `gh pr merge <n> --disable-auto`.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable:
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # No checkout: this job only calls the GitHub API, so PR code never runs with these permissions.
+      - name: Enable auto-merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge "$PR_URL" --auto --merge
