@@ -9,6 +9,9 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { loadConfig, projectSlug } from "@/lib/config";
+import { getDb } from "@/lib/db";
+import { listOpenChases } from "@/lib/design";
+import { chaseUrgency } from "@/lib/design-meta";
 import { cn } from "@/lib/utils";
 
 // Wide futurist display face, an angular sci-fi UI face, and a dashboard readout mono.
@@ -28,16 +31,23 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // Phones (via the LAN gateway) never see the "allow this device?" prompt.
   const remote = (await headers()).get("x-mondo-remote") === "1";
   const projects = loadConfig().projects.map((p) => ({ name: p.name, slug: projectSlug(p.name) }));
+  // Chases due today or overdue, across projects: shown as a badge on Design.
+  let dueChases = 0;
+  try {
+    dueChases = listOpenChases(getDb()).filter((c) => ["overdue", "today"].includes(chaseUrgency(c.dueAt))).length;
+  } catch {
+    /* never let a badge break the page */
+  }
   return (
     <html lang="en" className={cn(display.variable, sans.variable, mono.variable)} suppressHydrationWarning>
       <body className="antialiased">
         <ThemeProvider>
           <TooltipProvider>
             <SidebarProvider>
-              <AppSidebar projects={projects} />
+              <AppSidebar projects={projects} designBadge={dueChases} />
               <SidebarInset className="min-w-0 bg-transparent">
                 {children}
-                <MobileNav />
+                <MobileNav badges={{ "/design": dueChases }} />
               </SidebarInset>
               {!remote && <PairingPrompt />}
             </SidebarProvider>

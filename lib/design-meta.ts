@@ -87,3 +87,47 @@ export const DECISION_LABEL: Record<ReviewDecision, string> = {
   change_intent: "Change the intent",
   accept: "Accept the gap",
 };
+
+// ---------- priority, chases, staleness ----------
+
+export const PRIORITIES = ["low", "normal", "high", "urgent"] as const;
+export type Priority = (typeof PRIORITIES)[number];
+
+export const PRIORITY_LABEL: Record<Priority, string> = {
+  low: "Low",
+  normal: "Normal",
+  high: "High",
+  urgent: "Urgent",
+};
+
+/** Higher sorts first. */
+export const PRIORITY_RANK: Record<Priority, number> = { urgent: 3, high: 2, normal: 1, low: 0 };
+
+/** Who a chase is waiting on. */
+export const WAITING_ON = ["you", "you_at_pc", "agent", "other"] as const;
+export type WaitingOn = (typeof WAITING_ON)[number];
+
+export const WAITING_LABEL: Record<WaitingOn, string> = {
+  you: "You",
+  you_at_pc: "You, at the PC",
+  agent: "An agent",
+  other: "Someone else",
+};
+
+export const CHASE_STATUSES = ["open", "done", "dropped"] as const;
+export type ChaseStatus = (typeof CHASE_STATUSES)[number];
+
+/** Ideas and proposals untouched for this long, with no open chase, count as stale. */
+export const STALE_AFTER_MS = 30 * 24 * 3600 * 1000;
+
+export const DAY_MS = 24 * 3600 * 1000;
+
+/** "overdue" (past due), "today" (due before the end of today), "soon" (within 7 days), else "later". */
+export function chaseUrgency(dueAt: number, now = Date.now()): "overdue" | "today" | "soon" | "later" {
+  if (dueAt < now) return "overdue";
+  const endOfToday = new Date(now);
+  endOfToday.setHours(23, 59, 59, 999);
+  if (dueAt <= endOfToday.getTime()) return "today";
+  if (dueAt - now <= 7 * DAY_MS) return "soon";
+  return "later";
+}

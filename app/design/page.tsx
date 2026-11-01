@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { ChaseBoard } from "@/components/design-bible";
 import { PageHeader } from "@/components/page-header";
 import { loadConfig, projectSlug } from "@/lib/config";
 import { getDb } from "@/lib/db";
-import { bandOf, gaps, listTree } from "@/lib/design";
+import { bandOf, gaps, listOpenChases, listTree } from "@/lib/design";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +19,14 @@ export default function DesignPage() {
       sky: tree.filter((n) => bandOf(n.stage) === "sky").length,
       grey: tree.filter((n) => bandOf(n.stage) === "grey").length,
       ground: tree.filter((n) => bandOf(n.stage) === "ground").length,
-      attention: g.openReviews.length + g.drifted.length + g.blocking.length + g.flagged.length,
+      attention: g.openReviews.length + g.drifted.length + g.blocking.length + g.flagged.length + g.overdue.length,
     };
   });
+
+  const slugOf = new Map(loadConfig().projects.map((p) => [p.name, projectSlug(p.name)]));
+  const chases = listOpenChases(db)
+    .filter((c) => slugOf.has(c.project))
+    .map((c) => ({ ...c, slug: slugOf.get(c.project)! }));
 
   return (
     <>
@@ -30,6 +36,7 @@ export default function DesignPage() {
           Each project&apos;s living design, from what the game does today (ground, written by agents from the code) through
           what&apos;s approved and being built (the grey zone) up to ideas (sky).
         </p>
+        <ChaseBoard items={chases} />
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {projects.map((p) => (
             <Link key={p.slug} href={`/design/${p.slug}`} className="frame block rounded-lg border bg-card/60 p-4 transition-colors hover:border-leeloo">

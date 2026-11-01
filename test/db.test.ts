@@ -13,6 +13,7 @@ describe("database", () => {
     expect(tables).toEqual([
       "agent_entries",
       "agents",
+      "design_chases",
       "design_events",
       "design_links",
       "design_nodes",

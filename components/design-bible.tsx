@@ -1,10 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
+  AlarmClock,
   AlertTriangle,
+  Check,
+  ChevronsUp,
+  ExternalLink,
+  Flame,
   ChevronDown,
   ChevronRight,
   CircleHelp,
@@ -34,12 +40,20 @@ import {
   STAGE_HINT,
   STAGE_LABEL,
   bandOf,
+  chaseUrgency,
+  PRIORITIES,
+  PRIORITY_LABEL,
+  PRIORITY_RANK,
+  WAITING_LABEL,
+  WAITING_ON,
+  type Priority,
+  type WaitingOn,
   type Band,
   type Kind,
   type LinkType,
   type Stage,
 } from "@/lib/design-meta";
-import type { DesignEvent, NodeDetail, Revision, TreeNode } from "@/lib/design";
+import type { ChaseListItem, DesignEvent, NodeDetail, Revision, TreeNode } from "@/lib/design";
 
 // ---------- look ----------
 
@@ -139,6 +153,7 @@ function Select<T extends string>({
 interface TreeData {
   project: string;
   tree: TreeNode[];
+  chases: ChaseListItem[];
   events: DesignEvent[];
   lastEvent: number;
 }
@@ -238,9 +253,24 @@ function useMinWidth(px: number) {
 
 // ---------- gaps ----------
 
-type GapKey = "drifted" | "openReviews" | "blocking" | "questions" | "flagged" | "approvedUnbuilt" | "unchecked" | "drafts";
+type GapKey =
+  | "overdue"
+  | "priority"
+  | "drifted"
+  | "openReviews"
+  | "blocking"
+  | "questions"
+  | "flagged"
+  | "approvedUnbuilt"
+  | "unchecked"
+  | "drafts"
+  | "stale";
+
+const STALE_MS = 30 * 24 * 3600 * 1000;
 
 const GAPS: { key: GapKey; label: string; test: (n: TreeNode) => boolean; urgent?: boolean }[] = [
+  { key: "overdue", label: "Overdue chases", test: (n) => n.nextChaseAt !== null && n.nextChaseAt < Date.now(), urgent: true },
+  { key: "priority", label: "High priority", test: (n) => (n.priority === "high" || n.priority === "urgent") && n.stage !== "built", urgent: true },
   { key: "openReviews", label: "Open reviews", test: (n) => n.openReviews > 0, urgent: true },
   { key: "drifted", label: "Drifted", test: (n) => n.fidelity === "drifted", urgent: true },
   { key: "blocking", label: "Blocking questions", test: (n) => n.blockingQuestions > 0, urgent: true },
@@ -249,6 +279,11 @@ const GAPS: { key: GapKey; label: string; test: (n: TreeNode) => boolean; urgent
   { key: "drafts", label: "Unsigned intent", test: (n) => n.intentDraft },
   { key: "approvedUnbuilt", label: "Approved, not built", test: (n) => n.stage === "approved" },
   { key: "unchecked", label: "Unverified", test: (n) => n.hasCanonIntent && n.hasReality && n.fidelity === "unchecked" },
+  {
+    key: "stale",
+    label: "Stale ideas",
+    test: (n) => (n.stage === "idea" || n.stage === "proposed") && n.openChases === 0 && Date.now() - n.updatedAt > STALE_MS,
+  },
 ];
 
 function GapsStrip({ tree, active, onPick }: { tree: TreeNode[]; active: GapKey | null; onPick: (k: GapKey | null) => void }) {
@@ -292,6 +327,11 @@ function GapsStrip({ tree, active, onPick }: { tree: TreeNode[]; active: GapKey 
 function NodeFlags({ n }: { n: TreeNode }) {
   return (
     <span className="flex shrink-0 items-center gap-1.5">
+      {n.priority === "urgent" && <Flame className="size-3.5 text-fire" aria-label="Urgent" />}
+      {n.priority === "high" && <ChevronsUp className="size-3.5 text-taxi" aria-label="High priority" />}
+      {n.nextChaseAt !== null && (
+        <AlarmClock className={cn("size-3.5", URGENCY_TEXT[chaseUrgency(n.nextChaseAt)])} aria-label="Open chase" />
+      )}
       {n.openReviews > 0 && <span className="hazard h-3 w-5 rounded-sm" title="Open review" />}
       {n.fidelity === "drifted" && <GitCompareArrows className="size-3.5 text-taxi" aria-label="Drifted" />}
       {n.realityFlag && <Flag className="size-3.5 text-destructive" aria-label="Reality flagged" />}
@@ -603,6 +643,8 @@ function NodePanel({
           )}
         </div>
         <StageControl slug={slug} detail={detail} onDone={refresh} />
+        <PriorityControl slug={slug} node={node} onDone={refresh} />
+        <ChasesBlock slug={slug} detail={detail} onDone={refresh} />
         {detail.children.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {detail.children.map((c) => (
@@ -1163,6 +1205,7 @@ function LinksTab({
         </Button>
       </form>
       {error && <p className="text-xs text-destructive">{error}</p>}
+      <ExternalLinks slug={slug} detail={detail} onDone={onDone} />
     </div>
   );
 }
@@ -1182,13 +1225,20 @@ const EVENT_LABEL: Record<string, string> = {
   question_resolved: "Question resolved",
   linked: "Linked",
   unlinked: "Unlinked",
-  source_added: "Source added",
+  source_added: "Link added",
+  priority: "Priority changed",
+  chase_added: "Chase set",
+  chase_snoozed: "Chase snoozed",
+  chase_closed: "Chase closed",
 };
 
 function eventDetail(e: DesignEvent): string {
   const d = e.detail as Record<string, string | null>;
   if (e.type === "stage") return `${STAGE_LABEL[d.from as Stage] ?? d.from} → ${STAGE_LABEL[d.to as Stage] ?? d.to}${d.note ? ` · ${d.note}` : ""}`;
   if (e.type === "fidelity") return `${d.from} → ${d.to}`;
+  if (e.type === "priority") return `${PRIORITY_LABEL[d.from as Priority] ?? d.from} → ${PRIORITY_LABEL[d.to as Priority] ?? d.to}`;
+  if (e.type === "chase_added" || e.type === "chase_snoozed") return dueText((e.detail.dueAt ?? e.detail.to) as number);
+  if (e.type === "chase_closed") return d.outcome === "dropped" ? "Dropped" : "Done";
   if (e.type === "review_decided") return DECISION_LABEL[d.decision as keyof typeof DECISION_LABEL] ?? "";
   if (e.type === "reality_flagged") return d.note ?? "";
   return "";
@@ -1267,6 +1317,7 @@ export function DesignBible({ slug }: { slug: string }) {
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
       <div className="min-w-0 space-y-4">
         <GapsStrip tree={tree} active={gap} onPick={setGap} />
+        <ChaseList items={data.chases} slug={slug} onSelect={select} onChanged={reload} />
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-lg border p-0.5">
@@ -1358,5 +1409,317 @@ function Legend() {
         </span>
       ))}
     </div>
+  );
+}
+
+// ---------- priority, chases, external links ----------
+
+const URGENCY_TEXT = {
+  overdue: "text-destructive",
+  today: "text-taxi",
+  soon: "text-foreground",
+  later: "text-muted-foreground",
+} as const;
+
+/** "Overdue · Sat 1 Nov", "Today 09:00", "Tue 4 Nov". */
+function dueText(dueAt: number): string {
+  const u = chaseUrgency(dueAt);
+  const d = new Date(dueAt);
+  if (u === "today") return `Today ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
+  const day = d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  return u === "overdue" ? `Overdue · ${day}` : day;
+}
+
+/** 09:00 local time, `days` days from today. */
+function at9(days: number): number {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  d.setHours(9, 0, 0, 0);
+  return d.getTime();
+}
+
+/** yyyy-mm-dd for a date input, `days` from today. */
+function dateInput(days: number): string {
+  const d = new Date(at9(days));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function PriorityControl({ slug, node, onDone }: { slug: string; node: NodeDetail["node"]; onDone: () => void }) {
+  const { run, busy, error } = useAct(slug, onDone);
+  return (
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="readout mr-1">Priority</span>
+        {PRIORITIES.map((p) => (
+          <button
+            key={p}
+            disabled={busy || p === node.priority}
+            onClick={() => run({ action: "priority", node: node.id, priority: p })}
+            className={cn(
+              "flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs transition-colors hover:border-leeloo disabled:cursor-default",
+              p === node.priority
+                ? p === "urgent"
+                  ? "border-fire bg-fire/15 text-fire"
+                  : p === "high"
+                    ? "border-taxi bg-taxi/15 text-taxi"
+                    : "border-leeloo bg-leeloo/10 text-leeloo"
+                : "text-muted-foreground",
+            )}
+          >
+            {p === "urgent" && <Flame className="size-3" />}
+            {p === "high" && <ChevronsUp className="size-3" />}
+            {PRIORITY_LABEL[p]}
+          </button>
+        ))}
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+/** One open chase with quick actions: done, tomorrow, next week, drop. */
+function ChaseRow({
+  c,
+  slug,
+  onChanged,
+  context,
+}: {
+  c: { id: number; text: string; waitingOn: WaitingOn; dueAt: number; snoozes: number };
+  slug: string;
+  onChanged: () => void;
+  /** Shown above the text, e.g. the node and project, in lists across nodes. */
+  context?: React.ReactNode;
+}) {
+  const { run, busy, error } = useAct(slug, onChanged);
+  const u = chaseUrgency(c.dueAt);
+  return (
+    <li className={cn("space-y-1.5 rounded-lg border p-2.5", u === "overdue" && "border-destructive/60", u === "today" && "border-taxi/60")}>
+      {context}
+      <div className="flex items-start gap-2">
+        <AlarmClock className={cn("mt-0.5 size-4 shrink-0", URGENCY_TEXT[u])} />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm">{c.text}</p>
+          <p className="readout flex flex-wrap gap-x-3 normal-case">
+            <span className={URGENCY_TEXT[u]}>{dueText(c.dueAt)}</span>
+            <span>Waiting on: {WAITING_LABEL[c.waitingOn] ?? c.waitingOn}</span>
+            {c.snoozes > 0 && <span>Snoozed {c.snoozes}×</span>}
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-1.5 pl-6">
+        <Button size="xs" disabled={busy} onClick={() => run({ action: "close_chase", chase: c.id, outcome: "done" })}>
+          <Check /> Done
+        </Button>
+        <Button size="xs" variant="outline" disabled={busy} onClick={() => run({ action: "snooze_chase", chase: c.id, due: at9(1) })}>
+          Tomorrow
+        </Button>
+        <Button size="xs" variant="outline" disabled={busy} onClick={() => run({ action: "snooze_chase", chase: c.id, due: at9(7) })}>
+          Next week
+        </Button>
+        <Button size="xs" variant="ghost" disabled={busy} onClick={() => run({ action: "close_chase", chase: c.id, outcome: "dropped" })}>
+          Drop
+        </Button>
+      </div>
+      {error && <p className="pl-6 text-xs text-destructive">{error}</p>}
+    </li>
+  );
+}
+
+function sortChases<T extends { dueAt: number; priority?: Priority }>(items: T[]): T[] {
+  const dueNow = (x: T) => (["overdue", "today"].includes(chaseUrgency(x.dueAt)) ? 0 : 1);
+  return [...items].sort(
+    (a, b) =>
+      dueNow(a) - dueNow(b) || PRIORITY_RANK[b.priority ?? "normal"] - PRIORITY_RANK[a.priority ?? "normal"] || a.dueAt - b.dueAt,
+  );
+}
+
+/** Open chases for a project (or every project), due and important first. */
+export function ChaseList({
+  items,
+  slug,
+  onSelect,
+  onChanged,
+  showProject = false,
+}: {
+  items: (ChaseListItem & { slug?: string })[];
+  slug?: string;
+  onSelect?: (nodeId: string) => void;
+  onChanged: () => void;
+  showProject?: boolean;
+}) {
+  const [all, setAll] = useState(false);
+  if (!items.length) return null;
+  const sorted = sortChases(items);
+  const due = sorted.filter((c) => ["overdue", "today"].includes(chaseUrgency(c.dueAt))).length;
+  const shown = all ? sorted : sorted.slice(0, 4);
+  return (
+    <section className="space-y-2">
+      <h3 className="readout flex items-center gap-2">
+        <AlarmClock className="size-3.5" /> Chases <span className="text-foreground">{items.length}</span>
+        {due > 0 && <span className="text-taxi">· {due} due</span>}
+      </h3>
+      <ul className="space-y-2">
+        {shown.map((c) => {
+          const s = c.slug ?? slug ?? "";
+          const title = (
+            <span className="flex items-center gap-1.5">
+              {c.priority === "urgent" && <Flame className="size-3 text-fire" />}
+              {c.priority === "high" && <ChevronsUp className="size-3 text-taxi" />}
+              {showProject && <span>{c.project} ›</span>}
+              <span className="truncate text-foreground">{c.nodeTitle}</span>
+            </span>
+          );
+          return (
+            <ChaseRow
+              key={c.id}
+              c={c}
+              slug={s}
+              onChanged={onChanged}
+              context={
+                <div className="readout normal-case">
+                  {onSelect ? (
+                    <button className="hover:text-leeloo" onClick={() => onSelect(c.nodeId)}>
+                      {title}
+                    </button>
+                  ) : (
+                    <a className="hover:text-leeloo" href={`/design/${s}?node=${c.nodeId}`}>
+                      {title}
+                    </a>
+                  )}
+                </div>
+              }
+            />
+          );
+        })}
+      </ul>
+      {sorted.length > 4 && (
+        <button className="readout hover:text-leeloo" onClick={() => setAll(!all)}>
+          {all ? "Show fewer" : `Show all ${sorted.length}`}
+        </button>
+      )}
+    </section>
+  );
+}
+
+/** Cross-project chase list for server pages (refreshes the route after an action). */
+export function ChaseBoard({ items }: { items: (ChaseListItem & { slug: string })[] }) {
+  const router = useRouter();
+  if (!items.length) return <p className="text-sm text-muted-foreground">No open chases.</p>;
+  return <ChaseList items={items} onChanged={() => router.refresh()} showProject />;
+}
+
+/** The node's chases: open ones with quick actions, a form to add one, and closed history. */
+function ChasesBlock({ slug, detail, onDone }: { slug: string; detail: NodeDetail; onDone: () => void }) {
+  const open = sortChases(detail.chases.filter((c) => c.status === "open"));
+  const closed = detail.chases.filter((c) => c.status !== "open");
+  const [adding, setAdding] = useState(false);
+  const [text, setText] = useState("");
+  const [due, setDue] = useState(() => dateInput(1));
+  const [waitingOn, setWaitingOn] = useState<WaitingOn>("you");
+  const { run, busy, error } = useAct(slug, onDone);
+  return (
+    <div className="space-y-2">
+      {open.length > 0 && (
+        <ul className="space-y-2">
+          {open.map((c) => (
+            <ChaseRow key={c.id} c={c} slug={slug} onChanged={onDone} />
+          ))}
+        </ul>
+      )}
+      {adding ? (
+        <form
+          className="space-y-2 rounded-lg border border-dashed p-3"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (await run({ action: "chase", node: detail.node.id, text, due, waiting_on: waitingOn })) {
+              setText("");
+              setAdding(false);
+            }
+          }}
+        >
+          <div className="readout">New chase</div>
+          <Input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="What needs to happen?" />
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="date"
+              value={due}
+              onChange={(e) => setDue(e.target.value)}
+              className="h-8 rounded-lg border border-input bg-background px-2 text-sm dark:bg-input/30"
+            />
+            <Select value={waitingOn} onChange={setWaitingOn} options={WAITING_ON.map((w) => ({ value: w, label: WAITING_LABEL[w] }))} />
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" type="submit" disabled={busy || !text.trim() || !due}>
+              <AlarmClock /> Set chase
+            </Button>
+            <Button size="sm" type="button" variant="ghost" onClick={() => setAdding(false)}>
+              Cancel
+            </Button>
+          </div>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+        </form>
+      ) : (
+        <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+          <AlarmClock /> Add a chase
+        </Button>
+      )}
+      {closed.length > 0 && (
+        <details>
+          <summary className="readout cursor-pointer">Closed chases ({closed.length})</summary>
+          <ul className="mt-1 space-y-1">
+            {closed.map((c) => (
+              <li key={c.id} className="text-xs text-muted-foreground">
+                {c.status === "done" ? "✓" : "✕"} {c.text}
+                {c.note && ` · ${c.note}`} · {fmt(c.closedAt ?? c.createdAt)}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
+/** Links out of Mondo: PRs, docs, pages, settings. */
+function ExternalLinks({ slug, detail, onDone }: { slug: string; detail: NodeDetail; onDone: () => void }) {
+  const { run, busy, error } = useAct(slug, onDone);
+  const [ref, setRef] = useState("");
+  const [title, setTitle] = useState("");
+  return (
+    <section className="space-y-2 border-t pt-3">
+      <h4 className="readout">External links</h4>
+      {detail.sources.length === 0 && <p className="text-sm text-muted-foreground">None yet.</p>}
+      <ul className="space-y-1">
+        {detail.sources.map((s) => (
+          <li key={s.id} className="flex min-w-0 items-center gap-2 text-sm">
+            <ExternalLink className="size-3.5 shrink-0 text-brass" />
+            {/^https?:\/\//.test(s.ref) ? (
+              <a href={s.ref} target="_blank" rel="noreferrer" className="min-w-0 truncate text-diva hover:underline">
+                {s.title || s.ref}
+              </a>
+            ) : (
+              <span className="min-w-0 truncate">{s.title ? `${s.title} · ${s.ref}` : s.ref}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+      <form
+        className="flex flex-wrap gap-2"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (await run({ action: "source", node: detail.node.id, ref, title: title || null })) {
+            setRef("");
+            setTitle("");
+          }
+        }}
+      >
+        <Input className="min-w-0 flex-1" value={ref} onChange={(e) => setRef(e.target.value)} placeholder="https://… or a file path" />
+        <Input className="min-w-0 flex-1" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title (optional)" />
+        <Button size="sm" type="submit" disabled={busy || !ref.trim()}>
+          <Plus /> Add link
+        </Button>
+      </form>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </section>
   );
 }

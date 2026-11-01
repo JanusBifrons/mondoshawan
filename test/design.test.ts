@@ -19,6 +19,12 @@ import {
   signIntent,
   updateNode,
   writeRevision,
+  setPriority,
+  addChase,
+  snoozeChase,
+  closeChase,
+  listOpenChases,
+  DAY_MS,
 } from "@/lib/design";
 
 const AGENT = "agent:survey";
@@ -156,5 +162,48 @@ describe("links and events", () => {
     expect(getNodeDetail(db, shields.id).links).toMatchObject([{ direction: "in", otherTitle: "Missiles", note: "dup ok" }]);
     expect(lastEventId(db, P)).toBeGreaterThan(before);
     expect(weapons).toBeTruthy();
+  });
+});
+
+describe("priority, chases and staleness", () => {
+  it("sets priority and lists it as a gap until built", () => {
+    const { db } = setup();
+    const n = addNode(db, { project: P, title: "Mute emails" }, HUMAN);
+    expect(n.priority).toBe("normal");
+    setPriority(db, n.id, "high", HUMAN);
+    expect(() => setPriority(db, n.id, "massive", HUMAN)).toThrow(/priority/);
+    expect(gaps(listTree(db, P)).highPriority.map((x) => x.id)).toEqual([n.id]);
+  });
+
+  it("adds, snoozes and closes chases; overdue ones surface", () => {
+    const { db, missiles } = setup();
+    const c = addChase(db, missiles.id, { text: "Run gh auth refresh", due: "2026-11-02", waitingOn: "you_at_pc" }, AGENT);
+    expect(new Date(c.dueAt).getHours()).toBe(9);
+    expect(c.waitingOn).toBe("you_at_pc");
+    expect(() => addChase(db, missiles.id, { text: "x", due: "someday" }, AGENT)).toThrow(/due/);
+
+    const t = listTree(db, P).find((n) => n.id === missiles.id)!;
+    expect(t.openChases).toBe(1);
+    expect(t.nextChaseAt).toBe(c.dueAt);
+    expect(gaps(listTree(db, P), c.dueAt + 1).overdue.map((n) => n.id)).toEqual([missiles.id]);
+    expect(gaps(listTree(db, P), c.dueAt - 1).overdue).toHaveLength(0);
+
+    const s = snoozeChase(db, c.id, c.dueAt + DAY_MS, HUMAN);
+    expect(s.snoozes).toBe(1);
+    expect(listOpenChases(db)).toMatchObject([{ id: c.id, nodeTitle: "Missiles", project: P }]);
+
+    closeChase(db, c.id, "done", "Done at the PC", HUMAN);
+    expect(listOpenChases(db, P)).toHaveLength(0);
+    expect(() => snoozeChase(db, c.id, "2026-12-01", HUMAN)).toThrow(/closed/);
+    expect(getNodeDetail(db, missiles.id).chases[0]).toMatchObject({ status: "done", note: "Done at the PC" });
+  });
+
+  it("flags untouched ideas without a chase as stale", () => {
+    const { db } = setup();
+    const idea = addNode(db, { project: P, title: "Mines" }, HUMAN);
+    const later = Date.now() + 31 * DAY_MS;
+    expect(gaps(listTree(db, P), later).stale.map((n) => n.id)).toEqual([idea.id]);
+    addChase(db, idea.id, { text: "Decide on mines", due: later + DAY_MS }, HUMAN);
+    expect(gaps(listTree(db, P), later).stale).toHaveLength(0);
   });
 });
