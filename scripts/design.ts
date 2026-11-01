@@ -45,6 +45,8 @@ Actions:
   snooze_chase   {chase, due}
   close_chase    {chase, outcome?, note?}  outcome: done (default) | dropped
   chases                                 open chases, soonest first
+  search         {text}                  everything recorded: nodes, Intent, Reality, questions + answers,
+                                         and what the owner said in design talks (check before asking)
   batch          [{action, ...args}, ...]  run several actions in order (use --file)
 
 stage:    ${STAGES.join(" | ")}
@@ -53,7 +55,7 @@ fidelity: ${FIDELITIES.join(" | ")}
 link:     ${LINK_TYPES.join(" | ")}
 outcome:  ${QUESTION_OUTCOMES.join(" | ")}`;
 
-const READ_ONLY_ACTIONS = ["tree", "get", "gaps", "chases"];
+const READ_ONLY_ACTIONS = ["tree", "get", "gaps", "chases", "search"];
 
 function main() {
   const argv = process.argv.slice(2);

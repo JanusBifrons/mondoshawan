@@ -66,7 +66,7 @@ Survey **one system at a time** (e.g. "Weapons"), as asked. Don't survey the who
    npm run -s design -- EQX-Net link '{"from":"Weapons/Missiles","to":"Shields","type":"affects","note":"Damage hits shields before hull"}' --as agent:survey
    ```
 
-6. **Raise questions** for anything a designer should decide: oddities, contradictions, or behaviour that looks accidental. Don't use them for things you could check yourself.
+6. **Raise questions** for anything a designer should decide: oddities, contradictions, or behaviour that looks accidental. Don't use them for things you could check yourself. Only raise a question about a decision that changes how something works or fits, never micro detail (which items, exact numbers, tuning). And search first (`search {"text":"..."}`): if the owner already answered it anywhere, in the bible or in a design talk, don't ask again.
    ```bash
    npm run -s design -- EQX-Net ask '{"node":"Weapons/Missiles/Homing","text":"Missiles also lock onto asteroids. Intended?","related":["Asteroids"]}' --as agent:survey
    ```

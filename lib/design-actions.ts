@@ -1,4 +1,5 @@
 import type { DB } from "./db";
+import { searchDesign } from "./design-search";
 import {
   DesignError,
   addLink,
@@ -65,6 +66,7 @@ export const ACTIONS = [
   "snooze_chase",
   "close_chase",
   "chases",
+  "search",
 ] as const;
 
 function nodeId(db: DB, project: string, ref: unknown, what = "node"): string {
@@ -231,6 +233,10 @@ export function runAction(db: DB, project: string, input: ActionInput, actor: Ac
 
     case "chases":
       return listOpenChases(db, project);
+
+    case "search":
+      if (typeof a.text !== "string" || !a.text.trim()) throw new DesignError("text is required");
+      return searchDesign(db, project, a.text);
 
     default:
       throw new DesignError(`unknown action "${a.action}". Actions: ${ACTIONS.join(", ")}`);
