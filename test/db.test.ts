@@ -10,7 +10,7 @@ describe("database", () => {
     const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as { name: string }[])
       .map((r) => r.name)
       .filter((n) => !n.startsWith("sqlite_"));
-    expect(tables).toEqual(["drive_files", "drive_syncs", "sessions"]);
+    expect(tables).toEqual(["agent_entries", "agents", "devices", "drive_files", "drive_syncs", "sessions"]);
   });
 
   it("is safe to migrate twice", () => {

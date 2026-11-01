@@ -38,8 +38,17 @@ npm run fake -- --list       # list scenarios
 - `npm run check:projects`: confirms each registered project exists, and shows its branch and worktrees.
 - `npm test`: unit tests.
 
+## Using Mondo from your phone
+1. In `mondo.config.json`, set `"lan": { "enabled": true, "host": "0.0.0.0", "port": 4318 }` under `server`.
+2. Restart Mondo. When Windows asks, allow it through the firewall on **private networks only**.
+3. Open **Settings → Phone access** on the PC and scan the QR code with your phone (same Wi-Fi).
+4. The phone shows a 4-digit code and the Mondo window on the PC asks "A device wants to use Mondo". If the codes match, click **Allow**.
+
+Approved phones stay signed in until you click **Revoke** next to them in Settings. The QR code alone only lets a device ask; to change it, delete `data/remote-token` and restart Mondo.
+
 ## Pages
 - **Sessions:** live Claude Code sessions.
+- **Agents:** start a Claude Code agent in a project (main checkout, an existing worktree, or a new one), chat with it, interrupt, stop and resume it. Works from the phone.
 - **Knowledge base:** docs from every project in one list, searchable and filterable, with a reading pane. It draws on repo markdown, folders outside the repo, and linked Google Drive docs.
 - **Settings:** hook install status, server address, and registered projects.
 
